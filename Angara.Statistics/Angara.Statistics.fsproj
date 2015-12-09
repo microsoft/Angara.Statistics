@@ -49,11 +49,17 @@
     </Otherwise>
   </Choose>
   <Import Project="$(FSharpTargetsPath)" />
+  <Target Name="AfterBuild" Condition=" '$(Configuration)' == 'Release'">
+    <Exec Command="&quot;../.nuget/nuget.exe&quot; pack Angara.Statistics.fsproj -Prop Configuration=Release">
+    </Exec>
+  </Target>
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Statistics.fs" />
     <None Include="Angara.Statistics.nuspec" />
-    <Content Include="License.txt" />
+    <Content Include="..\License.txt">
+      <Link>License.txt</Link>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
@@ -64,7 +70,4 @@
     <Reference Include="System.Core" />
     <Reference Include="System.Numerics" />
   </ItemGroup>
-  <Target Name="AfterBuild" Condition=" '$(Configuration)' == 'Release'">
-    <Exec Command="&quot;../.nuget/nuget.exe&quot; pack Angara.Statistics.fsproj -Prop Configuration=Release"></Exec>
-  </Target>
 </Project>
