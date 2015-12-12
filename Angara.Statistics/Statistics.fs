@@ -590,6 +590,7 @@ let correlation (x:float[]) (y:float[]) =
 // KDE
 
 // adopted from MathNet.Numerics
+// https://github.com/mathnet/mathnet-numerics/blob/v3.9.0/src/Numerics/IntegralTransforms/Fourier.RadixN.cs
 
 type Complex = System.Numerics.Complex
 
@@ -645,9 +646,11 @@ let Radix2(samples:Complex[], exponentSign:int) =
 
 
 
-let fi x = float(x)
+let private fi x = float(x)
 let _i_ = Complex.ImaginaryOne
 let _ip_ = Complex(0.0,1.0)
+
+/// Inverse FFT
 let ifft (xs:Complex[]) = 
     let samples = Array.copy xs
     Radix2(samples,1)
@@ -656,6 +659,8 @@ let ifft (xs:Complex[]) =
         let v = samples.[i]
         samples.[i] <- Complex(scalingFactor * v.Real, scalingFactor * v.Imaginary)
     samples
+
+/// Fast Fourier transform 
 let fft (xs:Complex[]) = 
     let samples = Array.copy xs
     Radix2(samples,-1)
@@ -697,14 +702,11 @@ let idct (rxs:float[]) =
             | Odd(z) -> vals.[len - hz - 1]
     [| for i in 0..len-1 do yield interleave(i) |]
 
-// http://numerics.mathdotnet.com/api/MathNet.Numerics.RootFinding/Bisection.htm#FindRoot
-// http://hackage.haskell.org/package/statistics-0.10.5.0/docs/src/Statistics-Sample-KernelDensity.html#kde
-
-//open MathNet.Numerics
-//open MathNet.Numerics.Statistics
-//open MathNet.Numerics.RootFinding
-//open Angara.Math.Statistics.Transform
-
+// http://hackage.haskell.org/package/statistics-0.10.5.0/docs/src/Statistics-Function.html#nextHighestPowerOfTwo
+//
+// Efficiently compute the next highest power of two for a
+// non-negative integer.  If the given value is already a power of
+// two, it is returned unchanged.  If negative, zero is returned.
 let nextHighestPowerOfTwo n =
   let   i0   = n - 1
   let   i1   = i0  ||| (i0 >>> 1)
@@ -729,33 +731,14 @@ let histogram_ n xmin xmax xs =
             h.[idx] <- h.[idx] + 1
     xs |> Seq.iter add
     h
-//    let h = Histogram(xs, n, min, max)
-//    Array.init h.BucketCount (fun bi -> int(h.Item(bi).Count))
 
-let ridders tolerance (lb, ub) (func : float->float) =
-    let rec step a fa b fb =
-        let m = 0.5 * (a+b)
-        if abs(b-a) < 2.* tolerance then Some m
-        else
-            let fm = func m
-            if sign fa = sign fm
-            then step m fm b fb
-            else step a fa m fm
-        
-    let flb = func lb
-    let fub = func ub
-    if sign flb = sign fub then None
-    else step lb flb ub fub
-//    let root = ref 0.0
-//    if Bisection.TryFindRoot(System.Func<float,float>(func), lb, ub, tolerance, 100, root) then Some(!root) else None
-
-let fromRoot defaultRoot root =
-    match root with | Some(r) -> r | None -> defaultRoot
-
+// from http://hackage.haskell.org/package/statistics-0.10.5.0/docs/src/Statistics-Sample-KernelDensity.html#kde
+//
 // Gaussian kernel density estimator for one-dimensional data, using
 // the method of Botev et al.
 //
-// NaN in the sample are ignored.
+// Botev. Z.I., Grotowski J.F., Kroese D.P. (2010). Kernel density estimation via diffusion. 
+// /Annals of Statistics/ 38(5):2916-2957. <http://arxiv.org/pdf/1011.2602>
 //
 // The result is a pair of vectors, containing:
 //
@@ -766,13 +749,31 @@ let fromRoot defaultRoot root =
 // n0 The number of mesh points to use in the uniform discretization
 // of the interval @(min,max)@.  If this value is not a power of
 // two, then it is rounded up to the next power of two.
+//
 // min Lower bound (@min@) of the mesh range.
 // max Upper bound (@max@) of the mesh range.
-let kde2 n0 min max (sample:float[]) =
-    if sample = null || sample.Length = 0 then failwith "Empty sample"
-    else if(n0 = 1) then failwith "Invalid number of points"
+// NaN in the sample are ignored.
+let kde2 n0 min max (sample:float seq) =
+    /// find root with bisection method
+    let bisect tolerance (lb, ub) (func : float->float) =
+        let rec step a fa b fb =
+            let m = 0.5 * (a+b)
+            if abs(b-a) < 2.* tolerance then Some m
+            else
+                let fm = func m
+                if sign fa = sign fm
+                then step m fm b fb
+                else step a fa m fm
+        
+        let flb = func lb
+        let fub = func ub
+        if sign flb = sign fub then None
+        else step lb flb ub fub
+    if sample = null then invalidArg "sample" "cannot be null"
+    else if(n0 = 1) then invalidArg "n0" "cannot be 1"
     else
-        let xs = Array.filter (System.Double.IsNaN >> not) sample
+        let xs = Seq.filter (System.Double.IsNaN >> not) sample |> Array.ofSeq
+        if Array.isEmpty xs then invalidArg "sample" "doesn't contain numeric values"
         let m_sqrt_2_pi = sqrt (2.0*pi)
         let m_sqrt_pi = sqrt pi
         let r = max - min
@@ -806,7 +807,7 @@ let kde2 n0 min max (sample:float[]) =
                     if s=1 then h else go (s-1) (f si time) 
             
                 let eq x = x - (len * (2.0 * m_sqrt_pi) * go 6 (f 7.0 x)) ** (-0.4)
-                (fromRoot (0.28 * len ** (-0.4)) << ridders 1e-14 (0.0,0.1)) eq
+                match bisect 1e-14 (0.0,0.1) eq with Some root -> root | None -> (0.28 * len ** (-0.4))
                 
             let f2 b z = b * exp (sqr z * sqr pi * t_star * (-0.5)) 
             let a2 = Seq.map2 f2 a [| for i in 0..n0-1 do yield fi i |] |> Array.ofSeq
@@ -829,21 +830,21 @@ let kde2 n0 min max (sample:float[]) =
 // n0 The number of mesh points to use in the uniform discretization
 // of the interval @(min,max)@.  If this value is not a power of
 // two, then it is rounded up to the next power of two.
-let kde n0 (xs:float[]) =
-    if(xs = null) then failwith "empty sample"     
+let kde n0 (xs:float seq) =
+    if(xs = null) then invalidArg "sample" "cannot be empty"
     else
         let mutable max = System.Double.MinValue
         let mutable min = System.Double.MaxValue
         let range =         
-            if xs.Length = 0 then 
+            if Seq.isEmpty xs then 
                 min <- 0.0
                 max <- 0.0
                 1.0  // unreasonable guess
             else
-                for i in 0 .. xs.Length - 1 do
-                  if max < (xs.[i]) then 
-                       max <- xs.[i]
-                  if min > (xs.[i]) then 
-                       min <- xs.[i]
-                if min = max then 1.0 else max - min
+                xs |> Seq.iter (fun xsi -> 
+                  if max < (xsi) then 
+                       max <- xsi
+                  if min > (xsi) then 
+                       min <- xsi)
+                if min >= max then 1.0 else max - min
         kde2 n0 (min - range/10.0) (max + range/10.0) xs
