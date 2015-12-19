@@ -810,7 +810,7 @@ let kde2 n0 min max (sample:float seq) =
                 match bisect 1e-14 (0.0,0.1) eq with Some root -> root | None -> (0.28 * len ** (-0.4))
                 
             let f2 b z = b * exp (sqr z * sqr pi * t_star * (-0.5)) 
-            let a2 = Seq.map2 f2 a [| for i in 0..n0-1 do yield fi i |] |> Array.ofSeq
+            let a2 = Seq.map2 f2 a [| for i in 0..ni-1 do yield fi i |] |> Array.ofSeq
             let a1 = idct a2
             let a0 = Array.map (fun x -> x / (2.0*r)) a1
             a0
