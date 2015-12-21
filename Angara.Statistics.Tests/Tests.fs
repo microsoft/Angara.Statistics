@@ -42,7 +42,7 @@ let dct_4() =
     result |> should (equalWithin 1.e-12) [|2.0; 2.*cos(pi*1./8.); 2.*cos(pi*2./8.); 2.*cos(pi*3./8.)|]
 
 [<Test>]
-let within() =
+let within_tests() =
     let omicron = System.Double.Epsilon // smallest positive float
     let rec find_eps d = if 0.5*d + 1.0 = 1.0 then 1.0+d else find_eps (0.5*d)
     let epsilon = find_eps 1.0 // smallest float greater than one
@@ -90,6 +90,37 @@ let within() =
         let some = seq {1..100} |> Seq.scan (fun f i -> f*epsilon) (one*epsilon)
         some |> Seq.mapi (fun i f -> within (uint32 i) one f) |> should not' (contain true)
         some |> Seq.mapi (fun i f -> within (uint32 i + 1u) one f) |> should not' (contain false)
+
+[<Test>]
+let ridders_tests() =
+    ridders 0. (-1.0, -2.0) (fun x -> x) |> should equal None
+    ridders 0. (1.0, 2.0) (fun x -> x) |> should equal None
+    ridders 0. (-2.0, -1.0) (fun x -> x) |> should equal None
+    ridders 0. (2.0, 1.0) (fun x -> x) |> should equal None
+    ridders 0. (1.0, 0.0) (fun x -> x) |> should equal (Some 0.0)
+    ridders 0. (0.0, 1.0) (fun x -> x) |> should equal (Some 0.0)
+    ridders 0. (-1.0, 1.0) (fun x -> x) |> should equal (Some 0.0)
+    ridders 0. (1.0, -1.0) (fun x -> x) |> should equal (Some 0.0)
+    // for linear function the solution is exact on the first iteration
+    ridders 0. (-1.0, 2.0) (fun x -> x) |> should equal (Some 0.0)
+    ridders 1e-5 (-1.0, 2.0) (fun x -> x) |> should equal (Some 0.0)
+    ridders 0. (1.0, -2.0) (fun x -> x) |> should equal (Some 0.0)
+    ridders 1e-5 (1.0, -2.0) (fun x -> x) |> should equal (Some 0.0)
+    // quadratic function is well-behaved
+    ridders 0. (0.5, 2.0) (fun x -> x * (x-1.)) |> should equal (Some 1.0)
+    ridders 1e-5 (-1.0, 2.0) (fun x -> x) |> should equal (Some 0.0)
+    match ridders 1e-3 (0.5, 2.0) (fun x -> x * (x-1.)) with
+    | None -> Assert.Fail "should not be None"
+    | Some v -> v |> should (equalWithin 1e-3) 1.0
+    match ridders 1e-15 (0.5, 2.0) (fun x -> x * (x-1.)) with
+    | None -> Assert.Fail "should not be None"
+    | Some v -> v |> should (equalWithin 1e-15) 1.0
+    // check exit by within 1u
+    match ridders 0.0 (0.5, 2.0) (fun x -> if x < 1. then -1.0 else 1.0) with
+    | None -> Assert.Fail "should not be None"
+    | Some v -> 
+        v |> should not' (equal 1.)
+        within 1u v 1. |> should be True
 
 [<Test>]
 let KernelDensityEstimation_2() =

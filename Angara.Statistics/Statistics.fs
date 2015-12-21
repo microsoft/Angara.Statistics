@@ -744,6 +744,42 @@ let within (ulps:uint32) a b =
     elif ai>=0L && bi<0L then cmp ai (System.Int64.MinValue-bi)
     else cmp ai bi 
 
+/// Use the method of Ridders to compute a root of a function.
+let ridders tolerance (lb, ub) (f : float->float) =
+    // The function must have opposite signs when evaluated at the lower 
+    // and upper bounds of the search (i.e. the root must be bracketed). 
+
+    let rec iter a fa b fb i =
+        if 100 <= i then None // Too many iterations performed. Fail
+        else
+        if within 1u a b then Some a // Root is bracketed within 1 ulp. No improvement could be made
+        else
+        let d = abs(b-a)
+        let dm = (b-a) * 0.5
+        let m = a + dm
+        let fm = f m
+        if 0.0 = fm then Some m else
+        let dn = float(sign(fb - fa)) * dm * fm / sqrt(fm*fm - fa*fb)
+        let n = m - float(sign dn) * min (abs dn) (abs dm - 0.5 * tolerance)
+        if d < tolerance then Some n else
+        if n=a || n=b then
+            // Ridder's approximation coincide with one of old bounds. Revert to bisection 
+            if 0.0 > fm*fa then iter a fa m fm (i+1)
+            else iter m fm b fb (i+1)
+        else
+        let fn = f n
+        if 0.0 = fn then Some n
+        elif 0.0 > fn*fm then iter n fn m fm (i+1)
+        elif 0.0 > fn*fa then iter a fa n fn (i+1)
+        else iter n fn b fb (i+1)
+                    
+    let flb  = f lb
+    if 0.0 = flb then Some lb else
+    let fub = f ub
+    if 0.0 = fub then Some ub
+    elif 0.0 < fub*flb then None // root is not bracketed
+    else iter lb flb ub fub 0
+
 // from http://hackage.haskell.org/package/statistics-0.10.5.0/docs/src/Statistics-Sample-KernelDensity.html#kde
 //
 // Gaussian kernel density estimator for one-dimensional data, using
@@ -766,21 +802,6 @@ let within (ulps:uint32) a b =
 // max Upper bound (@max@) of the mesh range.
 // NaN in the sample are ignored.
 let kde2 n0 min max (sample:float seq) =
-    /// find root with bisection method
-    let bisect tolerance (lb, ub) (func : float->float) =
-        let rec step a fa b fb =
-            let m = 0.5 * (a+b)
-            if abs(b-a) < 2.* tolerance then Some m
-            else
-                let fm = func m
-                if sign fa = sign fm
-                then step m fm b fb
-                else step a fa m fm
-        
-        let flb = func lb
-        let fub = func ub
-        if sign flb = sign fub then None
-        else step lb flb ub fub
     // check kde2 arguments
     if sample = null then invalidArg "sample" "cannot be null"
     else if(n0 = 1) then invalidArg "n0" "cannot be 1"
@@ -820,7 +841,7 @@ let kde2 n0 min max (sample:float seq) =
                     if s=1 then h else go (s-1) (f si time) 
             
                 let eq x = x - (len * (2.0 * m_sqrt_pi) * go 6 (f 7.0 x)) ** (-0.4)
-                match bisect 1e-14 (0.0,0.1) eq with Some root -> root | None -> (0.28 * len ** (-0.4))
+                match ridders 1e-14 (0.0,0.1) eq with Some root -> root | None -> (0.28 * len ** (-0.4))
                 
             let f2 b z = b * exp (sqr z * sqr pi * t_star * (-0.5)) 
             let a2 = Seq.map2 f2 a [| for i in 0..ni-1 do yield fi i |] |> Array.ofSeq
