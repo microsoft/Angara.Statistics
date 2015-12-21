@@ -732,6 +732,18 @@ let histogram_ n xmin xmax xs =
     xs |> Seq.iter add
     h
 
+/// Approximate comparison of two double values.
+/// Tolerance ulps is in units of least precision.
+let within (ulps:uint32) a b =
+    // See e.g. "Comparing Floating Point Numbers, 2012 Edition" by  Bruce Dawson
+    // https://randomascii.wordpress.com/2012/02/25/comparing-floating-point-numbers-2012-edition/
+    let ai = System.BitConverter.DoubleToInt64Bits a
+    let bi = System.BitConverter.DoubleToInt64Bits b
+    let cmp ai bi = if ai<=bi then bi-ai <= int64 ulps else ai-bi <= int64 ulps
+    if ai<0L && bi>=0L then cmp (System.Int64.MinValue-ai) bi
+    elif ai>=0L && bi<0L then cmp ai (System.Int64.MinValue-bi)
+    else cmp ai bi 
+
 // from http://hackage.haskell.org/package/statistics-0.10.5.0/docs/src/Statistics-Sample-KernelDensity.html#kde
 //
 // Gaussian kernel density estimator for one-dimensional data, using
@@ -769,6 +781,7 @@ let kde2 n0 min max (sample:float seq) =
         let fub = func ub
         if sign flb = sign fub then None
         else step lb flb ub fub
+    // check kde2 arguments
     if sample = null then invalidArg "sample" "cannot be null"
     else if(n0 = 1) then invalidArg "n0" "cannot be 1"
     else

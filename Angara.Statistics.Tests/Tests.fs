@@ -42,6 +42,62 @@ let dct_4() =
     result |> should (equalWithin 1.e-12) [|2.0; 2.*cos(pi*1./8.); 2.*cos(pi*2./8.); 2.*cos(pi*3./8.)|]
 
 [<Test>]
+let within() =
+    let omicron = System.Double.Epsilon // smallest positive float
+    let rec find_eps d = if 0.5*d + 1.0 = 1.0 then 1.0+d else find_eps (0.5*d)
+    let epsilon = find_eps 1.0 // smallest float greater than one
+    // minus 0 -- the second representation of zero
+    let minus0 = -omicron / 2.0
+    minus0 |> should equal 0.0
+    let bits_0 = System.BitConverter.DoubleToInt64Bits 0.0
+    let bits_minus0 = System.BitConverter.DoubleToInt64Bits minus0
+    bits_minus0 |> should not' (equal bits_0)
+    //
+    // equality
+    within 0u 1. 1. |> should be True
+    within 0u -1. -1. |> should be True
+    within 0u 0. 0. |> should be True
+    within 0u minus0 minus0 |> should be True
+    within 0u 0. minus0 |> should be True
+    within 0u minus0 0. |> should be True
+    // adjacent
+    within 1u 0. omicron |> should be True
+    within 0u 0. omicron |> should be False
+    within 1u minus0 omicron |> should be True
+    within 0u minus0 omicron |> should be False
+    within 1u 0. -omicron |> should be True
+    within 0u 0. -omicron |> should be False
+    within 1u minus0 -omicron |> should be True
+    within 0u minus0 -omicron |> should be False
+    within 0u 1. epsilon |> should be False
+    within 1u 1. epsilon |> should be True
+    within 2u 1. epsilon |> should be True
+    within System.UInt32.MaxValue 1. epsilon |> should be True
+    within 0u epsilon 1. |> should be False
+    within 1u epsilon 1. |> should be True
+    within 2u epsilon 1. |> should be True
+    within System.UInt32.MaxValue epsilon 1. |> should be True
+    // two steps apart
+    within 2u 0. (2.*omicron) |> should be True
+    within 1u 0. (2.*omicron) |> should be False
+    within 0u 0. (2.*omicron) |> should be False
+    within 1u omicron -omicron |> should be False
+    within 2u omicron -omicron |> should be True
+    within 1u -omicron omicron |> should be False
+    within 2u -omicron omicron |> should be True
+    //
+    for one in [1.; -1.] do
+        let some = seq {1..100} |> Seq.scan (fun f i -> f*epsilon) (one*epsilon)
+        some |> Seq.mapi (fun i f -> within (uint32 i) one f) |> should not' (contain true)
+        some |> Seq.mapi (fun i f -> within (uint32 i + 1u) one f) |> should not' (contain false)
+
+[<Test>]
+let KernelDensityEstimation_2() =
+    let x,y = kde 2 [| 0.0; 1.0 |]
+    x |> should (equalWithin 1.e-12) [| -0.1; 1.1 |]
+    y |> should (equalWithin 1.e-12) [| 1.0/1.2; 1.0/1.2 |]
+
+[<Test>]
 let KernelDensityEstimation_Normal() =
     let data = [| 0.204644865259654; -0.144545587125715; -0.118956445994713; -0.0469338391365766; 0.03745006601189; 0.0474434648487626; 
         0.0489947779088937; -0.023541123128428; -0.141367168805941; 0.0209207976156952; 0.124715845091793; -0.0255870975000263; 0.0146939287935733; 
