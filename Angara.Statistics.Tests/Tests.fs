@@ -121,6 +121,11 @@ let ridders_tests() =
     | Some v -> 
         v |> should not' (equal 1.)
         within 1u v 1. |> should be True
+    // check bisection branch when discriminant vanishes to 0
+    match ridders 0.0 (0.5, 2.0) (fun x -> (sqrt System.Double.Epsilon) * (x-1.)) with
+    | None -> Assert.Fail "should not be None"
+    | Some v ->  within 1u v 1. |> should be True
+
 
 [<Test>]
 let KernelDensityEstimation_2() =

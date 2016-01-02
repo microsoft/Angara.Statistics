@@ -745,6 +745,9 @@ let within (ulps:uint32) a b =
     else cmp ai bi 
 
 /// Use the method of Ridders to compute a root of a function.
+//   Ridders, C.F.J. (1979) A new algorithm for computing a single
+//   root of a real continuous function.
+//   /IEEE Transactions on Circuits and Systems/ 26:979--980.
 let ridders tolerance (lb, ub) (f : float->float) =
     // The function must have opposite signs when evaluated at the lower 
     // and upper bounds of the search (i.e. the root must be bracketed). 
@@ -773,6 +776,7 @@ let ridders tolerance (lb, ub) (f : float->float) =
         elif 0.0 > fn*fa then iter a fa n fn (i+1)
         else iter n fn b fb (i+1)
                     
+    if not (tolerance>=0.0) then invalidArg "tolerance" "must be greater than 0.0"
     let flb  = f lb
     if 0.0 = flb then Some lb else
     let fub = f ub
