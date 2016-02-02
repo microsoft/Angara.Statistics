@@ -53,6 +53,7 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Tests.fs" />
+    <Compile Include="FilzbachTests.fs" />
     <Content Include="packages.config" />
   </ItemGroup>
   <ItemGroup>

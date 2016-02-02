@@ -57,6 +57,7 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Statistics.fs" />
+    <Compile Include="Filzbach.fs" />
     <None Include="Angara.Statistics.nuspec" />
     <Content Include="..\License.txt">
       <Link>License.txt</Link>
