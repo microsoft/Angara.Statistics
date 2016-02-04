@@ -6,6 +6,7 @@
 
 type Distribution = 
   | Bernoulli of float // fraction of success [1e-16 to 1.0-1e-16] -> success/failure outcome, 1 or 0
+  /// the number of successes in a sequence of n independent yes/no experiments, each of which yields success with probability p.
   | Binomial of int*float // number of trials, probability of success -> number of successes, [0 to max_int]
   | NegativeBinomial of float*float // mean (0 to inf), number of failures or 'shape' for fractional values (0 to inf) -> number of successes, [0 to max_int]
   | Poisson of float // mean a.k.a. lambda [0, maxint] -> number of events [0 to maxint]
@@ -461,6 +462,10 @@ type MT19937 private (
         else
             let state = init_by_array(seed)
             MT19937(state, N)
+    member private x.getMt = mt
+    member private x.getIdx = idx
+    new(copy:MT19937) =
+        MT19937(copy.getMt, copy.getIdx)
 
     /// returns an array that allows to exactly restore the state of the generator.
     member x.get_seed() = [| yield! mt; yield uint32 mti|]
