@@ -62,6 +62,9 @@
     <Content Include="..\License.txt">
       <Link>License.txt</Link>
     </Content>
+    <None Include="Scripts\load-references-debug.fsx" />
+    <None Include="Scripts\load-project-debug.fsx" />
+    <None Include="Filzbach_multispp.fsx" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
