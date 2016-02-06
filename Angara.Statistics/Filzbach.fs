@@ -243,26 +243,31 @@ type Sampler private (logl: Parameters -> float,
                 [for i in 0..nalt-1 -> alterable.[shuffle.[i]]]
 
         // change parameter values, i.e. make the 'jump'
+        let mutable logfactor = 0.
         for i in alt do
             let old = values.[i]
             values.[i] <- infinity
-            while values.[i]<pall.[i].lower || values.[i]>pall.[i].upper do
-                let add = rng.normal() * deltas.[i]
-                if pall.[i].isLog then
-                    values.[i] <- old * exp(add)
-                else
-                    values.[i] <- old + add
-
+            let add = rng.normal() * deltas.[i]
+            if pall.[i].isLog then
+                values.[i] <- old * exp(add)
+                // Transformation of a coordinate leads to a new probability density multiplied by d(log x)/dx = 1/x.
+                // Hence the ratio of l(x*exp add)/l(x) must be l(x*exp add)*(x*exp add)/l(x)*x.
+                logfactor <- logfactor + add
+            else
+                values.[i] <- old + add
+        let inbounds = alt |> List.forall (fun i ->
+            values.[i]>=pall.[i].lower && values.[i]<=pall.[i].upper)
         // calc new lnlike
-        let ltotnew = pp.SetValues values |> logl
-        let ptotnew = log_prior pall values
+        let ltotnew = if inbounds then pp.SetValues values |> logl else ltotold
+        let ptotnew = if inbounds then log_prior pall values else ptotold
 
         // compare new to old and accept or reject -- METROPOLIS CRITERION IS IN HERE
         let accept = 
-            let dlik = (ltotnew+ptotnew) - (ltotold+ptotold)
+            inbounds &&
+            (let dlik = (ltotnew+ptotnew) - (ltotold+ptotold) + logfactor
             dlik >= 0. ||
-            (let rndnum = max 0.00000010 (min 0.99999990 (rng.uniform_float64()))
-            log rndnum < dlik)
+            (let rndnum = 1.0 - rng.uniform_float64()
+            log rndnum < dlik))
 
         // act on acceptance
         for i in alt do
