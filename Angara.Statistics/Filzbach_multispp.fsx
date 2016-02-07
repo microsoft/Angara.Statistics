@@ -8,41 +8,52 @@ do
     let rng = MT19937()
 
     // fake data
-    let numdata = 999
-    let numsp = 10
+    let numdata = 999 // number of observations
+    let numsp = 10 // number of observed species
+    // fake parameters: mean abundance of each species
     let trueparams = Array.init numsp (fun _ -> Uniform(1.0,10.0) |> draw rng)
     do
         printfn "%A" trueparams
         let s = summary trueparams
         printfn "mean = %g, std dev = %g" s.mean (sqrt s.variance)
     let fake_data = Array.init numdata (fun _ ->
+        // in each data raw
+        // species index taken randomly
         let spid = rng.uniform_int(numsp-1)
+        // for the selected species we generate random abundance from Poisson distribution 
         spid, Poisson trueparams.[spid] |> draw rng)
 
-    // parameters
+    // learning from the data:
+    // unknown model parameters
 
     let parameters = Parameters()
-                        .Add("lambda", numsp, 100.0, 0.01, 200.0, isLog=true)
-                        .Add("lambda_mean", 100.0, 0.01, 200.0, isLog=true)
-                        .Add("lambda_std", 0.2, 0.01, 2.0, isLog=true)
+                        .Add("lambda", numsp, 100.0, 0.01, 200.0, isLog=true) // vector
+                        .Add("lambda_mean", 100.0, 0.01, 200.0, isLog=true) // single value
+                        .Add("lambda_std", 0.2, 0.01, 2.0, isLog=true) // single value
 
-    // log-likelihood
+    // log-likelihood function takes data, parameters and computes log-likelihood
     let multispp (data:(int*float) seq) (p:Parameters) =
         let lambda = p.GetValues "lambda"
         let lambda_mean = p.GetValue "lambda_mean"
         let lambda_std = p.GetValue "lambda_std"
+        // these are likelihoods of individual data raws
         (data |> Seq.map (fun (spp,spcount) ->
             log_pdf (Poisson lambda.[spp]) spcount)
         |> Seq.sum)
         + 
+        // hierarchical modeling: model of the parameter values
         (lambda |> Seq.map (fun lam ->
             log_pdf (Normal(lambda_mean, lambda_std)) lam)
         |> Seq.sum)
 
     // runmcmc
     printfn "Initial log-likelihood = %g" (multispp fake_data parameters)
+    // All the work is in "runmcmc" call. Integer numbers are number of burn-in iterations and the requested number of samples.
+    // "runmcmc" returns a triple for further analysis. Simplest possible analysis is in "print". 
     Sampler.runmcmc(parameters, multispp fake_data, 5000, 50) |> Sampler.print
 
+
+    // below is an example of using "external" data instead of "fake" data.
     let c_data =
                 [|
                 1, 4.000000
@@ -1045,4 +1056,5 @@ do
                 4, 6.000000
                 8, 6.000000
                 |]
+
     Sampler.runmcmc(parameters, multispp c_data, 10000, 50) |> Sampler.print
