@@ -180,7 +180,7 @@ type Sampler private (logl: Parameters -> float,
         let values = pall |> Array.mapi (fun i def ->
             if def.delay<1 
             then Uniform(def.lower, def.upper) |> draw rng
-            else pp.values.[def.index + i])
+            else pp.values.[i])
         // initStepSizes 
         let deltas = pall |> Array.map (fun def ->
             if def.isLog
@@ -282,12 +282,18 @@ type Sampler private (logl: Parameters -> float,
                         let def = pall.[ii]
                         if def.isLog then 0.010, 10.0 //TODO: ????
                         else let full = def.upper-def.lower in 0.0010*full, 0.50*full
-                    if runacc.[ii] < 5 then
+                    if runacc.[ii] < 4 then
                         // decrease temperature by 20%
                         deltas.[ii] <- max dmin (min dmax (deltas.[ii] * 0.80))
-                    elif runacc.[ii] > 5 then
+                    elif runacc.[ii] < 5 then
+                        // decrease temperature by 10%
+                        deltas.[ii] <- max dmin (min dmax (deltas.[ii] * 0.90))
+                    elif runacc.[ii] > 6 then
                         // increase temperature by 20%
                         deltas.[ii] <- max dmin (min dmax (deltas.[ii] * 1.20))
+                    elif runacc.[ii] > 5 then
+                        // increase temperature by 10%
+                        deltas.[ii] <- max dmin (min dmax (deltas.[ii] * 1.10))
                     runalt.[ii] <- 0
                     runacc.[ii] <- 0
 
