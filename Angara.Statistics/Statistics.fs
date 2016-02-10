@@ -88,6 +88,8 @@ let qsummary data =
     if n<1 then {min=nan; lb95=nan; lb68=nan; median=nan; ub68=nan; ub95=nan; max=nan}
     else
         let q p =
+            // Definition 8 from Hyndman, R. J. and Fan, Y. (1996) Sample quantiles in statistical packages, American Statistician 50, 361–365.
+            // This is the same as stats.quantile(...,type=8) from R
             let h = p*(float n + 1./3.)-2./3.
             if h <= 0.0 then a.[0]
             elif h >= float (n-1) then a.[n-1]
