@@ -5,6 +5,32 @@ type Complex = System.Numerics.Complex
 
 open Angara.Statistics
 
+
+[<Test>]
+let QSummary() =
+    let qnan = {min=nan;lb95=nan;lb68=nan;median=nan;ub68=nan;ub95=nan;max=nan}
+    qsummary Seq.empty |> should equal qnan
+    // qsummary filters out nan and infinity values
+    qsummary [nan] |> should equal qnan
+    qsummary [infinity] |> should equal qnan
+    qsummary [-infinity] |> should equal qnan
+    for one in [-System.Double.MaxValue; -1.; 0.; 1.; System.Double.MaxValue] do
+        qsummary [one] |> should equal {min=one;lb95=one;lb68=one;median=one;ub68=one;ub95=one;max=one}
+    qsummary [1.;2.]  |> should equal {min=1. ;lb95=1. ;lb68=1. ;median=1.5 ;ub68=2. ;ub95=2. ;max=2.}
+//    > quantile(1:27 * 300,c(0.025,0.16,0.5,0.84,0.975),type=8)
+//     2.5%   16%   50%   84% 97.5% 
+//      305  1412  4200  6988  8095 
+    let q = qsummary [300. .. 300. .. 8100.]  
+    q.min |> should equal 300. 
+    q.max |> should equal 8100. 
+    within 2u q.lb95 305. |> should be True
+    within 2u q.lb68 1412. |> should be True
+    within 2u q.median 4200. |> should be True
+    within 2u q.ub68 6988. |> should be True
+    within 2u q.ub95 8095.  |> should be True
+
+
+
 [<Test>]
 let Radix2TransformsRealSineCorrectly () =
     let n = 16 
