@@ -29,7 +29,7 @@ type Parameters private (pdefs: Map<string,ParameterDefinition>, pvalues: float[
         System.Collections.Generic.KeyValuePair<string, float[]>(kv.Key, avalue kv.Value))
     do
         assert(Array.length pvalues = Map.fold (fun sum _ def -> sum + def.size) 0 pdefs)
-    new() = Parameters(Map.empty,[||])
+    static member Empty = Parameters(Map.empty,[||])
     member internal x.definitions = pdefs
     member internal x.values = pvalues
 
@@ -145,9 +145,12 @@ type Parameters private (pdefs: Map<string,ParameterDefinition>, pvalues: float[
         | _ -> false
     override x.GetHashCode() = pdefs.GetHashCode() ^^^ pvalues.GetHashCode()
 
+type Sample = {values:float[]; logLikelihood:float; logPrior:float}
+
+type SamplerResult = {sampler:Sampler; samples:Sample seq; acceptanceRate: float}
 
 /// An immutable state of Filzbach MCMC sampler.
-type Sampler private (logl: Parameters -> float,
+and  Sampler private (logl: Parameters -> float,
                       // utilities
                       pall: ParameterDefinition[],
                       // variables
@@ -324,19 +327,19 @@ type Sampler private (logl: Parameters -> float,
                 for _ in 1..thinning do
                     sampler <- sampler.Probe(false)
                     if sampler.IsAccepted then countAccepted <- countAccepted + 1
-                Array.copy sampler.Parameters.values, sampler.LogLikelihood, sampler.LogPrior
+                {values=Array.copy sampler.Parameters.values; logLikelihood = sampler.LogLikelihood; logPrior = sampler.LogPrior}
             ]
-        sampler, samples, ((float countAccepted) / (float sampleCount * float thinning))
+        {sampler = sampler; samples = samples; acceptanceRate = ((float countAccepted) / (float sampleCount * float thinning))}
 
-    static member print(sampler:Sampler, samples:(float[]*float*float) seq, acceptanceRate) =
+    static member print {sampler=sampler; samples=samples; acceptanceRate = acceptanceRate} =
         printfn "Samples max log likelihood*prior = %g, acceptance rate at sampling = %5.3f" 
-                    (samples |> Seq.map (fun (_,logl,logp) -> logl+logp) |> Seq.max)
+                    (samples |> Seq.map (fun {logLikelihood=logl; logPrior=logp} -> logl+logp) |> Seq.max)
                     acceptanceRate
         printfn "------------+------------+------------+------------+------------+------------+------------+------------+"
         printfn "       name |      lower |  lower 95%% |  lower 68%% |     median |  upper 68%% |  upper 95%% |      upper | prior"
         printfn "------------+------------+------------+------------+------------+------------+------------+------------+"
         for idx in 0..sampler.Parameters.CountValues-1 do
-            let q = qsummary (samples |> Seq.map (fun (sample,_,_) -> sample.[idx]))
+            let q = qsummary (samples |> Seq.map (fun {values=sample} -> sample.[idx]))
             let name = sampler.Parameters.GetName idx
             let pdef = sampler.Parameters.GetDefinition name
             let fullname = if pdef.size=1 then name else sprintf "%s[%d]" name (idx-pdef.index)

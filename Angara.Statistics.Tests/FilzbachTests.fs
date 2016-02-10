@@ -6,7 +6,7 @@ open Angara.Filzbach
 
 [<Test>]
 let ParametersTests() =
-    let p0 = Parameters()
+    let p0 = Parameters.Empty
     p0.CountValues |> should equal 0
     p0.AllValues |> should equal [||]
     (fun () -> p0.GetValue 0 |> ignore) |> should throw typeof<System.IndexOutOfRangeException>
