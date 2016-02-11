@@ -50,18 +50,11 @@
     </Otherwise>
   </Choose>
   <Import Project="$(FSharpTargetsPath)" />
-  <Target Name="AfterBuild" Condition=" '$(Configuration)' == 'Release'">
-    <Exec Command="&quot;../.nuget/nuget.exe&quot; pack Angara.Statistics.fsproj -Prop Configuration=Release">
-    </Exec>
-  </Target>
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Statistics.fs" />
     <Compile Include="Filzbach.fs" />
     <None Include="Angara.Statistics.nuspec" />
-    <Content Include="..\License.txt">
-      <Link>License.txt</Link>
-    </Content>
     <None Include="Scripts\load-references-debug.fsx" />
     <None Include="Scripts\load-project-debug.fsx" />
     <None Include="Scripts\load-references-release.fsx" />
