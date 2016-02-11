@@ -4,12 +4,16 @@ open System.Reflection
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 
+module internal Const =
+    [<Literal>]
+    let Version = "0.1.0" // Assembly semantic version
+
 [<assembly: AssemblyTitle("Angara.Statistics")>]
 [<assembly: AssemblyDescription("A random number generator, probability distributions and gaussian kernel density estimator.")>]
 [<assembly: AssemblyConfiguration("")>]
 [<assembly: AssemblyCompany("Microsoft Research")>]
-[<assembly: AssemblyProduct("Angara.Statistics")>]
-[<assembly: AssemblyCopyright("Copyright ©  2015")>]
+[<assembly: AssemblyProduct("Angara")>]
+[<assembly: AssemblyCopyright("Copyright © Microsoft Research 2016")>]
 [<assembly: AssemblyTrademark("")>]
 [<assembly: AssemblyCulture("")>]
 
@@ -21,18 +25,9 @@ open System.Runtime.InteropServices
 // The following GUID is for the ID of the typelib if this project is exposed to COM
 [<assembly: Guid("7dc6271f-642e-4431-bb7c-24f49a36413c")>]
 
-// Version information for an assembly consists of the following four values:
-// 
-//       Major Version
-//       Minor Version 
-//       Build Number
-//       Revision
-// 
-// You can specify all the values or you can default the Build and Revision Numbers 
-// by using the '*' as shown below:
-// [<assembly: AssemblyVersion("1.0.*")>]
-[<assembly: AssemblyVersion("0.1.1.0")>]
-[<assembly: AssemblyFileVersion("0.1.1.0")>]
+
+[<assembly: AssemblyVersion(Const.Version + ".0")>]
+[<assembly: AssemblyFileVersion(Const.Version + ".0")>]
 
 do
     ()

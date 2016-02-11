@@ -6,11 +6,10 @@
     <title>$title$</title>
     <authors>$author$</authors>
     <owners>$author$</owners>
-    <licenseUrl>https://github.com/Microsoft/Angara.Statistics/blob/master/License.txt</licenseUrl>
+    <licenseUrl>https://github.com/Microsoft/Angara.Statistics/blob/master/LICENSE</licenseUrl>
     <projectUrl>https://github.com/Microsoft/Angara.Statistics</projectUrl>
-    <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
-    <copyright>Copyright 2015</copyright>
+    <copyright>Copyright © Microsoft Research 2016</copyright>
     <tags>Statistics Distributions Random Number Generator Kernel Density Estimation</tags>
   </metadata>
 </package>
