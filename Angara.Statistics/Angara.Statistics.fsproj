@@ -59,6 +59,7 @@
     <None Include="Scripts\load-references-release.fsx" />
     <None Include="Scripts\load-project-release.fsx" />
     <None Include="Filzbach_multispp.fsx" />
+    <None Include="Angara.Statistics.nuspec" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
