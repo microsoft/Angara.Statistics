@@ -67,16 +67,24 @@ type Parameters private (pdefs: Map<string,ParameterDefinition>, pvalues: float[
                 prior = (let pr = defaultPrior prior in if pr = nonInformative then None else Some pr)
                 }, 
             Array.append pvalues values)
+    /// Add a scalar parameter.
+    /// To fix the parameter add isFixed=true optional argument which sets the delay to maxint. By default the delay is 0.
     member x.Add(name:string, value:float, lower:float, upper:float, ?isFixed, ?isLog, ?prior) =
         // by default, the parameter is a scalar value
         x.Add(name, [|value|], lower, upper, (if defaultArg isFixed false then System.Int32.MaxValue else 0), defaultLog isLog, defaultPrior prior)
+    /// Add a scalar parameter with fixed value
+    member x.Add(name:string, value:float, ?isLog, ?prior) = x.Add(name, [|value|], value, value, System.Int32.MaxValue, defaultLog isLog, defaultPrior prior)
+    /// Add a scalar parameter with a specific delay.
     member x.Add(name, value, lower, upper, delay, ?isLog, ?prior) =
         // by default, the parameter is a scalar value
         x.Add(name, [|value|], lower, upper, delay, defaultLog isLog, defaultPrior prior)
+    /// Add a vector parameter by the vector size and a value of all elements of the vector.
+    /// To fix the parameter add isFixed=true optional argument which sets the delay to maxint. By default the delay is 0.
     member x.Add(name, size, value, lower, upper, ?isFixed, ?isLog, ?prior) = 
         if size<1 then
             invalidArg "size" "parameter size must be 1 or greater."
         x.Add(name, Array.create size value, lower, upper, (if defaultArg isFixed false then System.Int32.MaxValue else 0), defaultLog isLog, defaultPrior prior)
+    /// Add a vector parameter by the vector size and a value of all elements of the vector with a specific delay.
     member x.Add(name, size, value, lower, upper, delay, ?isLog, ?prior) = 
         if size<1 then
             invalidArg "size" "parameter size must be 1 or greater."
@@ -246,6 +254,31 @@ and  Sampler private (logl: Parameters -> float,
                 [for i in 0..nalt-1 -> alterable.[shuffle.[i]]]
 
         // change parameter values, i.e. make the 'jump'
+#if COMPATIBLE
+        // This should be compatible with original Filzbach as of v1.2
+        // Jumps out of parameter bounds don't count as iterations.
+        // Sampling on logarithmic scale do not include 1/x factor.
+        for i in alt do
+            let old = values.[i]
+            values.[i] <- infinity
+            while values.[i]<pall.[i].lower || values.[i]>pall.[i].upper do
+                let add = rng.normal() * deltas.[i]
+                if pall.[i].isLog then
+                    values.[i] <- old * exp(add)
+                else
+                    values.[i] <- old + add
+
+        // calc new lnlike
+        let ltotnew = pp.SetValues values |> logl
+        let ptotnew = log_prior pall values
+
+        // compare new to old and accept or reject -- METROPOLIS CRITERION IS IN HERE
+        let accept = 
+            let dlik = (ltotnew+ptotnew) - (ltotold+ptotold)
+            dlik >= 0. ||
+            (let rndnum = max 0.00000010 (min 0.99999990 (rng.uniform_float64()))
+            log rndnum < dlik)
+#else
         let mutable logfactor = 0.
         for i in alt do
             let old = values.[i]
@@ -258,6 +291,8 @@ and  Sampler private (logl: Parameters -> float,
                 logfactor <- logfactor + add
             else
                 values.[i] <- old + add
+        // Jumps out of parameter bounds count as iterations and are automatically rejected
+        // as discussed in https://darrenjw.wordpress.com/2012/06/04/metropolis-hastings-mcmc-when-the-proposal-and-target-have-differing-support/.
         let inbounds = alt |> List.forall (fun i ->
             values.[i]>=pall.[i].lower && values.[i]<=pall.[i].upper)
         // calc new lnlike
@@ -271,7 +306,7 @@ and  Sampler private (logl: Parameters -> float,
             dlik >= 0. ||
             (let rndnum = 1.0 - rng.uniform_float64()
             log rndnum < dlik))
-
+#endif
         // act on acceptance
         for i in alt do
             runalt.[i] <- runalt.[i]+1
