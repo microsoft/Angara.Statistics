@@ -254,47 +254,22 @@ and  Sampler private (logl: Parameters -> float,
                 [for i in 0..nalt-1 -> alterable.[shuffle.[i]]]
 
         // change parameter values, i.e. make the 'jump'
-#if COMPATIBLE
-        // This should be compatible with original Filzbach as of v1.2
-        // Jumps out of parameter bounds don't count as iterations.
-        // Sampling on logarithmic scale do not include 1/x factor.
+        // VL: This should be compatible with original Filzbach as of v1.2 during the burn-in phase
+        //     and properly accounts for parameter bounds during the sampling phase
         for i in alt do
             let old = values.[i]
-            values.[i] <- infinity
-            while values.[i]<pall.[i].lower || values.[i]>pall.[i].upper do
+            let mutable more = true
+            while more do
                 let add = rng.normal() * deltas.[i]
                 if pall.[i].isLog then
                     values.[i] <- old * exp(add)
                 else
                     values.[i] <- old + add
+                more <- isBurnIn && (values.[i]<pall.[i].lower || values.[i]>pall.[i].upper)
+        // in burn-in phase we cannot jump out of bounds
+        let inbounds = isBurnIn || (alt |> List.forall (fun i ->
+            values.[i]>=pall.[i].lower && values.[i]<=pall.[i].upper))
 
-        // calc new lnlike
-        let ltotnew = pp.SetValues values |> logl
-        let ptotnew = log_prior pall values
-
-        // compare new to old and accept or reject -- METROPOLIS CRITERION IS IN HERE
-        let accept = 
-            let dlik = (ltotnew+ptotnew) - (ltotold+ptotold)
-            dlik >= 0. ||
-            (let rndnum = max 0.00000010 (min 0.99999990 (rng.uniform_float64()))
-            log rndnum < dlik)
-#else
-        let mutable logfactor = 0.
-        for i in alt do
-            let old = values.[i]
-            values.[i] <- infinity
-            let add = rng.normal() * deltas.[i]
-            if pall.[i].isLog then
-                values.[i] <- old * exp(add)
-                // Transformation of a coordinate leads to a new probability density multiplied by d(log x)/dx = 1/x.
-                // Hence the ratio of l(x*exp add)/l(x) must be l(x*exp add)*(x*exp add)/l(x)*x.
-                logfactor <- logfactor + add
-            else
-                values.[i] <- old + add
-        // Jumps out of parameter bounds count as iterations and are automatically rejected
-        // as discussed in https://darrenjw.wordpress.com/2012/06/04/metropolis-hastings-mcmc-when-the-proposal-and-target-have-differing-support/.
-        let inbounds = alt |> List.forall (fun i ->
-            values.[i]>=pall.[i].lower && values.[i]<=pall.[i].upper)
         // calc new lnlike
         let ltotnew = if inbounds then pp.SetValues values |> logl else ltotold
         let ptotnew = if inbounds then log_prior pall values else ptotold
@@ -302,11 +277,11 @@ and  Sampler private (logl: Parameters -> float,
         // compare new to old and accept or reject -- METROPOLIS CRITERION IS IN HERE
         let accept = 
             inbounds &&
-            (let dlik = (ltotnew+ptotnew) - (ltotold+ptotold) + logfactor
+            let dlik = (ltotnew+ptotnew) - (ltotold+ptotold)
             dlik >= 0. ||
-            (let rndnum = 1.0 - rng.uniform_float64()
-            log rndnum < dlik))
-#endif
+            (let rndnum = max 0.00000010 (min 0.99999990 (rng.uniform_float64()))
+            log rndnum < dlik)
+
         // act on acceptance
         for i in alt do
             runalt.[i] <- runalt.[i]+1
@@ -324,13 +299,13 @@ and  Sampler private (logl: Parameters -> float,
                         // decrease temperature by 20%
                         deltas.[ii] <- max dmin (min dmax (deltas.[ii] * 0.80))
                     elif runacc.[ii] < 5 then
-                        // decrease temperature by 10%
+                        // VL: decrease temperature by 10%
                         deltas.[ii] <- max dmin (min dmax (deltas.[ii] * 0.90))
                     elif runacc.[ii] > 6 then
                         // increase temperature by 20%
                         deltas.[ii] <- max dmin (min dmax (deltas.[ii] * 1.20))
                     elif runacc.[ii] > 5 then
-                        // increase temperature by 10%
+                        // VL: increase temperature by 10%
                         deltas.[ii] <- max dmin (min dmax (deltas.[ii] * 1.10))
                     runalt.[ii] <- 0
                     runacc.[ii] <- 0
