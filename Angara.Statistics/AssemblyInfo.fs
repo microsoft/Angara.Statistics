@@ -6,7 +6,7 @@ open System.Runtime.InteropServices
 
 module internal Const =
     [<Literal>]
-    let Version = "0.1.1" // Assembly semantic version
+    let Version = "0.1.2" // Assembly semantic version
 
 [<assembly: AssemblyTitle("Angara.Statistics")>]
 [<assembly: AssemblyDescription("A random number generator, probability distributions, a gaussian kernel density estimator and an MCMC sampler.")>]

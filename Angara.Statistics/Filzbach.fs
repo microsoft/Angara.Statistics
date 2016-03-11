@@ -1,6 +1,7 @@
 ﻿module Angara.Filzbach
 open Angara.Statistics
 
+[<CustomEquality>][<NoComparison>]
 type ParameterDefinition = 
     {
     index: int
@@ -12,9 +13,15 @@ type ParameterDefinition =
     /// If delay=1, the sampler starts with the value from the definition record.
     /// If delay>1, the sampler doesn't change the parameter value for the first 'delay' iterations.
     delay: int
-    prior: Distribution option
+    prior: float -> float // log_pdf of prior distribution; if isLog, then the first argument of prior is log-parameter; all vector element reuse the same prior.
     } 
     member x.isFixed = x.delay = System.Int32.MaxValue
+    override x.Equals other =
+        match other with
+        | :? ParameterDefinition as y -> y.index = x.index && y.size = x.size && y.lower = x.lower && x.upper = x.upper && y.isLog = x.isLog && y.delay = x.delay
+        | _ -> false
+    override x.GetHashCode() =
+        x.index.GetHashCode() ^^^ x.size.GetHashCode() ^^^ x.lower.GetHashCode() ^^^ x.upper.GetHashCode() ^^^ x.isLog.GetHashCode() ^^^ x.delay.GetHashCode()
 
 type IParameters = System.Collections.Generic.IReadOnlyDictionary<string, float[]>
 
@@ -22,8 +29,9 @@ type IParameters = System.Collections.Generic.IReadOnlyDictionary<string, float[
 type Parameters private (pdefs: Map<string,ParameterDefinition>, pvalues: float[]) =
     let defaultLog isLog = defaultArg isLog false 
     let defaultDelay delay = defaultArg delay 0
-    let nonInformative = Uniform(-infinity,infinity)
-    let defaultPrior prior = defaultArg prior nonInformative
+    let uniformPrior _ = 0.
+    let normalPrior mu sigma v = let d = mu-v in -0.5*d*d/sigma
+    let defaultPrior prior = defaultArg prior uniformPrior
     let avalue pdef = Array.sub pvalues pdef.index pdef.size
     let all = pdefs |> Seq.map (fun kv -> 
         System.Collections.Generic.KeyValuePair<string, float[]>(kv.Key, avalue kv.Value))
@@ -64,31 +72,68 @@ type Parameters private (pdefs: Map<string,ParameterDefinition>, pvalues: float[
                 upper = upper
                 isLog = defaultLog isLog
                 delay = (if lower=upper then -1 else defaultDelay delay)
-                prior = (let pr = defaultPrior prior in if pr = nonInformative then None else Some pr)
+                prior = defaultPrior prior
                 }, 
             Array.append pvalues values)
-    /// Add a scalar parameter.
-    /// To fix the parameter add isFixed=true optional argument which sets the delay to maxint. By default the delay is 0.
-    member x.Add(name:string, value:float, lower:float, upper:float, ?isFixed, ?isLog, ?prior) =
-        // by default, the parameter is a scalar value
-        x.Add(name, [|value|], lower, upper, (if defaultArg isFixed false then System.Int32.MaxValue else 0), defaultLog isLog, defaultPrior prior)
-    /// Add a scalar parameter with fixed value
-    member x.Add(name:string, value:float, ?isLog, ?prior) = x.Add(name, [|value|], value, value, System.Int32.MaxValue, defaultLog isLog, defaultPrior prior)
-    /// Add a scalar parameter with a specific delay.
-    member x.Add(name, value, lower, upper, delay, ?isLog, ?prior) =
-        // by default, the parameter is a scalar value
-        x.Add(name, [|value|], lower, upper, delay, defaultLog isLog, defaultPrior prior)
-    /// Add a vector parameter by the vector size and a value of all elements of the vector.
-    /// To fix the parameter add isFixed=true optional argument which sets the delay to maxint. By default the delay is 0.
-    member x.Add(name, size, value, lower, upper, ?isFixed, ?isLog, ?prior) = 
-        if size<1 then
-            invalidArg "size" "parameter size must be 1 or greater."
-        x.Add(name, Array.create size value, lower, upper, (if defaultArg isFixed false then System.Int32.MaxValue else 0), defaultLog isLog, defaultPrior prior)
-    /// Add a vector parameter by the vector size and a value of all elements of the vector with a specific delay.
-    member x.Add(name, size, value, lower, upper, delay, ?isLog, ?prior) = 
-        if size<1 then
-            invalidArg "size" "parameter size must be 1 or greater."
-        x.Add(name, Array.create size value, lower, upper, delay, defaultLog isLog, defaultPrior prior)
+    /// Add a fixed scalar parameter.
+    member x.Add(name, value) = x.Add(name, [|value|], value, value, System.Int32.MaxValue)
+    /// Add a fixed vector parameter.
+    member x.Add(name, values) = x.Add(name, values, Array.min values, Array.max values, System.Int32.MaxValue)
+    /// Add a parameter with a prior
+    member x.Add(name, prior, ?size) =
+        let theSize = defaultArg size 1
+        if theSize<1 then invalidArg "size" "vector parameter cannot have size < 1"
+        match prior with
+        | Uniform(lower, upper) ->
+            if upper<lower then invalidArg "prior" "in Uniform prior upper must not be less than lower" else
+            if upper=lower then x.Add(name, lower) else
+            x.Add(name, Array.create theSize (0.5*(lower+upper)), lower, upper, 0, false, uniformPrior)
+        | LogUniform(lower, upper) -> // isLog = true
+            if lower <= 0. then invalidArg "prior" "in LogUniform prior lower must be > 0" else
+            if upper<lower then invalidArg "prior" "in LogUniform prior upper must not be less than lower" else
+            if upper=lower then x.Add(name, lower) else
+            x.Add(name, Array.create theSize (0.5*(lower+upper)), lower, upper, 0, true, uniformPrior)
+        | Normal(mu, sigma) ->
+            // the below [lower, upper] interval contain 0.99999 of prior probability
+            if sigma <= 0. then invalidArg "prior" "in Normal prior sigma must be > 0" else
+            x.Add(name, Array.create theSize  mu, mu - 4.417 * sigma, mu + 4.417 * sigma, 0, false, normalPrior mu sigma)
+        | LogNormal(mu, sigma) -> // isLog = true
+            // the below [lower, upper] interval contain 0.99999 of prior probability
+            if mu <= 0. then invalidArg "prior" "in Normal prior mean must be > 0" else
+            if sigma <= 0. then invalidArg "prior" "in Normal prior sigma must be > 0" else
+            let logMu = log mu
+            x.Add(name, Array.create theSize mu, exp(logMu - 4.417 * sigma), exp(logMu + 4.417 * sigma), 0, true, normalPrior logMu sigma)
+        | _ -> invalidArg "prior" "this method overload accepts only Uniform, LogUniform, Normal and LogNormal priors" 
+
+    /// Add a parameter with a prior and starting values
+    member x.Add(name, values, prior) =
+        if Array.length values < 1 then invalidArg "values" "vector parameter cannot have size < 1"
+        match prior with
+        | Uniform(lower, upper) ->
+            if upper<lower then invalidArg "prior" "in Uniform prior upper must not be less than lower" else
+            if upper=lower then x.Add(name, lower) else
+            x.Add(name, values, min lower (Array.min values), max upper (Array.max values), 1, false, uniformPrior)
+        | LogUniform(lower, upper) -> // isLog = true
+            if lower <= 0. then invalidArg "prior" "in LogUniform prior lower must be > 0" else
+            if upper<lower then invalidArg "prior" "in LogUniform prior upper must not be less than lower" else
+            if upper=lower then x.Add(name, lower) else
+            x.Add(name, values,  min lower (Array.min values), max upper (Array.max values), 1, true, uniformPrior)
+        | Normal(mu, sigma) ->
+            // the below [lower, upper] interval contain 0.99999 of prior probability
+            if sigma <= 0. then invalidArg "prior" "in Normal prior sigma must be > 0" else
+            x.Add(name, values, min (mu - 4.417 * sigma) (Array.min values), max (mu + 4.417 * sigma) (Array.max values), 1, false, normalPrior mu sigma)
+        | LogNormal(mu, sigma) ->
+            // the below [lower, upper] interval contain 0.99999 of prior probability
+            if mu <= 0. then invalidArg "prior" "in Normal prior mean must be > 0" else
+            if sigma <= 0. then invalidArg "prior" "in Normal prior sigma must be > 0" else
+            let logMu = log mu
+            x.Add(name, values, min (exp(logMu - 4.417 * sigma)) (Array.min values), max (exp(logMu + 4.417 * sigma)) (Array.max values), 1, true, normalPrior logMu sigma)
+        | _ -> invalidArg "prior" "this method overload accepts only Uniform, LogUniform, Normal and LogNormal priors" 
+
+    /// Compatible with parameter_create, parameter_create_vector (see Filzbach User Guide). Parameter dsply not used here.
+    member x.Add(name, lb, ub, ``val``, ``type``, ``fixed``, dsply:int, ?number) =
+        let size = defaultArg number 1
+        x.Add(name, Array.create size ``val``, lb, ub, (if ``fixed`` = 0 then 0 else System.Int32.MaxValue), ``type`` <> 0, uniformPrior)
 
     /// Replaces all parameter values
     member x.SetValues
@@ -172,8 +217,7 @@ and  Sampler private (logl: Parameters -> float,
                       runalt:int[], // number of alterations of individual parameters
                       runacc:int[] // number of accepted alterations of individual parameters
     ) =
-    static let log_prior pall values = Array.fold2 (fun sum d v -> 
-            match d.prior with None -> sum | Some p -> sum + log_pdf p v) 0. pall values
+    static let log_prior pall values = Array.fold2 (fun sum d v -> d.prior v) 0. pall values
     static let make_pall (pp:Parameters) =
         let pall = Array.zeroCreate pp.CountValues
         for kv in pp.definitions do

@@ -4,6 +4,8 @@ open FsUnit
 
 open Angara.Filzbach
 
+let noPrior _ = 0.
+
 [<Test>]
 let ParametersTests() =
     let p0 = Parameters.Empty
@@ -33,7 +35,7 @@ let ParametersTests() =
     p1.GetValue "s" |> should equal 0.5
     p1.GetValue("s", 0) |> should equal 0.5
     (fun () -> p1.GetValue("s", 1) |> ignore) |> should throw typeof<System.IndexOutOfRangeException>
-    p1.GetDefinition "s" |> should equal {index=0; size=1; lower=0.; upper=1.; delay=0; prior=None; isLog=false}
+    p1.GetDefinition "s" |> should equal {index=0; size=1; lower=0.; upper=1.; delay=0; prior=noPrior; isLog=false}
     (p1:>IParameters).Count |> should equal 1
     (p1:>IParameters).ContainsKey "s" |> should be True
     (p1:>IParameters).ContainsKey "a" |> should be False
@@ -54,7 +56,7 @@ let ParametersTests() =
     (fun () -> p2.GetValue "v" |> ignore) |> should throw typeof<System.InvalidOperationException> // vector syntax
     p2.GetValue("v", 0) |> should equal 0.6
     p2.GetValue("v", 1) |> should equal 0.7
-    p2.GetDefinition "v" |> should equal {index=0; size=2; lower=0.; upper=1.; delay=0; prior=None; isLog=false}
+    p2.GetDefinition "v" |> should equal {index=0; size=2; lower=0.; upper=1.; delay=0; prior=noPrior; isLog=false}
     (p2:>IParameters).Count |> should equal 1
     (p2:>IParameters).ContainsKey "v" |> should be True
     (p2:>IParameters).ContainsKey "a" |> should be False
@@ -77,8 +79,8 @@ let ParametersTests() =
     p3.GetValue("v", 1) |> should equal 0.7
     p3.GetValue "s" |> should equal 0.5
     p3.GetValue("s", 0) |> should equal 0.5
-    p3.GetDefinition "s" |> should equal {index=2; size=1; lower=0.; upper=1.; delay=0; prior=None; isLog=false}
-    p3.GetDefinition "v" |> should equal {index=0; size=2; lower=0.; upper=1.; delay=0; prior=None; isLog=false}
+    p3.GetDefinition "s" |> should equal {index=2; size=1; lower=0.; upper=1.; delay=0; prior=noPrior; isLog=false}
+    p3.GetDefinition "v" |> should equal {index=0; size=2; lower=0.; upper=1.; delay=0; prior=noPrior; isLog=false}
     (p3:>IParameters).Count |> should equal 2
     (p3:>IParameters).ContainsKey "s" |> should be True
     (p3:>IParameters).ContainsKey "v" |> should be True
@@ -104,8 +106,8 @@ let ParametersTests() =
     p4.GetValue("v", 1) |> should equal 0.7
     p4.GetValue "s" |> should equal 0.5
     p4.GetValue("s", 0) |> should equal 0.5
-    p4.GetDefinition "s" |> should equal {index=0; size=1; lower=0.; upper=1.; delay=0; prior=None; isLog=false}
-    p4.GetDefinition "v" |> should equal {index=1; size=2; lower=0.; upper=1.; delay=0; prior=None; isLog=false}
+    p4.GetDefinition "s" |> should equal {index=0; size=1; lower=0.; upper=1.; delay=0; prior=noPrior; isLog=false}
+    p4.GetDefinition "v" |> should equal {index=1; size=2; lower=0.; upper=1.; delay=0; prior=noPrior; isLog=false}
     (p4:>IParameters).Count |> should equal 2
     (p4:>IParameters).ContainsKey "s" |> should be True
     (p4:>IParameters).ContainsKey "v" |> should be True

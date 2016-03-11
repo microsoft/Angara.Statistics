@@ -5,16 +5,17 @@
 //
 
 type Distribution = 
+  | Uniform of float*float // lower bound, upper bound (> lower bound) -> continuous [lower bound to upper bound)
+  | LogUniform of float*float // lower bound (> 0), upper bound (> lower bound) -> continuous [lower bound to upper bound)
+  | Normal of float*float // mean, standard deviation (> 0) -> continuous (-infinity to infinity)
+  | LogNormal of float*float // log mean, standard deviation of logarithm (> 0) -> continuous (0.0 to infinity)
   | Bernoulli of float // fraction of success [1e-16 to 1.0-1e-16] -> success/failure outcome, 1 or 0
   /// the number of successes in a sequence of n independent yes/no experiments, each of which yields success with probability p.
   | Binomial of int*float // number of trials, probability of success -> number of successes, [0 to max_int]
   | NegativeBinomial of float*float // mean (0 to inf), number of failures or 'shape' for fractional values (0 to inf) -> number of successes, [0 to max_int]
   | Poisson of float // mean a.k.a. lambda [0, maxint] -> number of events [0 to maxint]
-  | Normal of float*float // mean, standard deviation -> continuous (-infinity to infinity)
   | Gamma of float*float // alpha (>0), beta (>0) -> continuous (0 to infinity)
   | Exponential of float // rate lambda (>0) -> continuaous [0 to infinity)
-  | LogNormal of float*float // log mean, standard deviation of logarithm -> continuous (0.0 to infinity)
-  | Uniform of float*float // lower bound, upper bound -> continuous [lower bound to upper bound)
   | Mixture of (float*Distribution) list
 
 let improbable = 2.2250738585072014E-308 // 2^(-1022)
@@ -169,6 +170,9 @@ let rec log_pdf d v = // log-probability distribution function
             | Uniform(lb,ub) ->
                 if (v<lb || v>ub || lb>=ub) then log_improbable
                 else -log(ub-lb)
+            | LogUniform(lb,ub) ->
+                if (v<lb || v>ub || lb>=ub) then log_improbable
+                else -log(log ub - log lb) - log v
             | Exponential(lambda) -> 
                 if lambda<=0.0 then log_improbable else
                     log(lambda) - lambda*v
@@ -510,10 +514,11 @@ type MT19937 private (
 
 
 let rec draw (gen:MT19937) d = // random number generator
-    let rnorm (mean, stdev) = mean + stdev * gen.normal()
+    let rng_norm(mean, stdev) = mean + stdev * gen.normal()
+    let rng_unif(lower, upper) = lower + gen.uniform_float64()*(upper-lower)
     let rng_poisson lambda = 
         if lambda>30.0 then
-                rnorm(lambda,sqrt(lambda))
+                rng_norm(lambda,sqrt(lambda))
             else
                 let ell = exp(-lambda)
                 let rec step p k = if p<ell then k-1 else step (p*gen.uniform_float64()) (k+1)
@@ -554,11 +559,12 @@ let rec draw (gen:MT19937) d = // random number generator
                 else iter()
             iter()
     match d with
-    | Normal(mean,stdev) -> rnorm(mean,stdev)
-    | LogNormal(mean,stdev) -> exp(rnorm(log mean,stdev))
+    | Normal(mean,stdev) -> rng_norm(mean,stdev)
+    | LogNormal(mean,stdev) -> exp(rng_norm(log mean,stdev))
     | Gamma(a,b) -> rng_gamma a b
     | Exponential(lambda) -> rng_exp lambda
-    | Uniform(lower, upper) -> lower + gen.uniform_float64()*(upper-lower)
+    | Uniform(lower, upper) -> rng_unif(lower, upper)
+    | LogUniform(lower, upper) -> exp(rng_unif(log lower, log upper))
     | Bernoulli(fraction) -> if gen.uniform_float64()<fraction then 1.0 else 0.0
     | Poisson(lambda) -> rng_poisson lambda
     | Binomial(n,p) ->
