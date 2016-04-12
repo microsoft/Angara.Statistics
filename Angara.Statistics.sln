@@ -1,17 +1,25 @@
-﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
 VisualStudioVersion = 14.0.24720.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Angara.Statistics", "Angara.Statistics\Angara.Statistics.fsproj", "{7DC6271F-642E-4431-BB7C-24F49A36413C}"
-EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Angara.Statistics.Tests", "Angara.Statistics.Tests\Angara.Statistics.Tests.fsproj", "{715A3795-0206-4A37-8FEE-40ECA36A5DD2}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{09EAF7B5-870E-4D5B-8FC2-296DA4380C21}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".paket", ".paket", "{63297B98-5CED-492C-A5B7-A5B4F73CF142}"
 	ProjectSection(SolutionItems) = preProject
-		LICENSE = LICENSE
-		README.md = README.md
+		paket.dependencies = paket.dependencies
+		paket.lock = paket.lock
 	EndProjectSection
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Angara.Statistics", "src\Angara.Statistics\Angara.Statistics.fsproj", "{5161430D-44B4-441C-BE95-89C02F215D38}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "project", "project", "{BF60BC93-E09B-4E5F-9D85-95A519479D54}"
+	ProjectSection(SolutionItems) = preProject
+		build.fsx = build.fsx
+		README.md = README.md
+		RELEASE_NOTES.md = RELEASE_NOTES.md
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{ED8079DD-2B06-4030-9F0F-DC548F98E1C4}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Angara.Statistics.Tests", "tests\Angara.Statistics.Tests\Angara.Statistics.Tests.fsproj", "{D5620A55-AA34-4DE7-A970-B2168A06D28D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -19,16 +27,19 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{7DC6271F-642E-4431-BB7C-24F49A36413C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{7DC6271F-642E-4431-BB7C-24F49A36413C}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{7DC6271F-642E-4431-BB7C-24F49A36413C}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{7DC6271F-642E-4431-BB7C-24F49A36413C}.Release|Any CPU.Build.0 = Release|Any CPU
-		{715A3795-0206-4A37-8FEE-40ECA36A5DD2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{715A3795-0206-4A37-8FEE-40ECA36A5DD2}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{715A3795-0206-4A37-8FEE-40ECA36A5DD2}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{715A3795-0206-4A37-8FEE-40ECA36A5DD2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5161430D-44B4-441C-BE95-89C02F215D38}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5161430D-44B4-441C-BE95-89C02F215D38}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5161430D-44B4-441C-BE95-89C02F215D38}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5161430D-44B4-441C-BE95-89C02F215D38}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D5620A55-AA34-4DE7-A970-B2168A06D28D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D5620A55-AA34-4DE7-A970-B2168A06D28D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D5620A55-AA34-4DE7-A970-B2168A06D28D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D5620A55-AA34-4DE7-A970-B2168A06D28D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{D5620A55-AA34-4DE7-A970-B2168A06D28D} = {ED8079DD-2B06-4030-9F0F-DC548F98E1C4}
 	EndGlobalSection
 EndGlobal

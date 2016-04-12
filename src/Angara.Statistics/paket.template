@@ -1,0 +1,25 @@
+type project
+title
+    ##ProjectName##
+owners
+    Vassily Lyutsarev
+authors 
+    Vassily Lyutsarev
+projectUrl
+    http://github.com/microsoft/Angara.Statistics
+iconUrl
+    https://raw.githubusercontent.com/microsoft/Angara.Statistics/master/docs/files/img/logo.png
+licenseUrl
+    http://github.com/microsoft/Angara.Statistics/blob/master/LICENSE.txt
+requireLicenseAcceptance
+    false
+copyright
+    Copyright 2015
+tags
+    statistics probability fsharp
+summary
+    A collection of statistics algorithms from Mersenne twister generator to MCMC sampling.
+description
+    Includes Mersenne twister random number generator, common probability distributions, statistics and quantiles, kernel density estimator, Metropolis-Hastings MCMC sampler.
+
+

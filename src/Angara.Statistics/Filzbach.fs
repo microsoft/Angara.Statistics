@@ -4,16 +4,22 @@ open Angara.Statistics
 [<CustomEquality>][<NoComparison>]
 type ParameterDefinition = 
     {
+    /// An index of the parameter in a parameter values array.
     index: int
+    /// A number of values. For vector parameters 'size>1`
     size: int
+    /// A lower bound of parameter values.
     lower: float
+    /// An upper bound of parameter values.
     upper: float
+    /// When `isLog=true` the sampler transforms the parameter to logarithmic space.
     isLog: bool
-    /// If delay<1, the sampler initializes the parameter value with a random number.
-    /// If delay=1, the sampler starts with the value from the definition record.
-    /// If delay>1, the sampler doesn't change the parameter value for the first 'delay' iterations.
+    /// If `delay<1`, the sampler initializes the parameter value with a random number.
+    /// If `delay=1`, the sampler starts with the value from the definition record.
+    /// If `delay>1`, the sampler doesn't change the parameter value for the first 'delay' iterations.
     delay: int
-    prior: float -> float // log_pdf of prior distribution; if isLog, then the first argument of prior is log-parameter; all vector element reuse the same prior.
+    /// log_pdf of prior distribution; if isLog, then the first argument of prior is log-parameter; all vector elements reuse the same prior.
+    prior: float -> float
     } 
     member x.isFixed = x.delay = System.Int32.MaxValue
     override x.Equals other =
@@ -130,16 +136,17 @@ type Parameters private (pdefs: Map<string,ParameterDefinition>, pvalues: float[
             x.Add(name, values, min (exp(logMu - 4.417 * sigma)) (Array.min values), max (exp(logMu + 4.417 * sigma)) (Array.max values), 1, true, normalPrior logMu sigma)
         | _ -> invalidArg "prior" "this method overload accepts only Uniform, LogUniform, Normal and LogNormal priors" 
 
-    /// Compatible with parameter_create, parameter_create_vector (see Filzbach User Guide). Parameter dsply not used here.
-    member x.Add(name, lb, ub, ``val``, ``type``, ``fixed``, dsply:int, ?number) =
+    /// Add a parameter.
+    /// This signature is compatible with `parameter_create` and `parameter_create_vector` functions
+    /// described in [Filzbach User Guide](http://research.microsoft.com/en-us/um/cambridge/groups/science/tools/filzbach/filzbach%20user%20gude%20v.1.1.pdf).
+    /// The `dsply` argument is not used here.
+    member x.Add(name, lb:float, ub:float, ``val``:float, ``type``, ``fixed``, dsply:int, ?number) =
         let size = defaultArg number 1
         x.Add(name, Array.create size ``val``, lb, ub, (if ``fixed`` = 0 then 0 else System.Int32.MaxValue), ``type`` <> 0, uniformPrior)
 
-    /// Replaces all parameter values
-    member x.SetValues
-            /// An array of all parameters values.
-            /// For a parameter 'name' the parameter values start with index '.GetDefinition(name).index' in the array.
-            values =
+    /// Replaces all parameter values.
+    /// For a parameter `"p"` the parameter values are at index `x.GetDefinition("p").index` in the `values` array.
+    member x.SetValues (values:float[]) =
         if Array.length values <> Array.length pvalues then
             invalidArg "values" "invalid length of the array."
         Parameters(pdefs, values)
@@ -163,7 +170,7 @@ type Parameters private (pdefs: Map<string,ParameterDefinition>, pvalues: float[
     member x.GetValues name = avalue pdefs.[name]
 
     /// Get all values of all parameters.
-    /// For a parameter 'name' the parameter values start with index '.GetDefinition(name).index' in the sequence.
+    /// For a parameter `"p"` the parameter values are at index `x.GetDefinition("p").index` in the `values` array.
     member x.AllValues = Seq.ofArray pvalues
 
     /// Total number of all parameter values.
@@ -175,7 +182,7 @@ type Parameters private (pdefs: Map<string,ParameterDefinition>, pvalues: float[
     /// Get a parameter name by value index.
     member x.GetName idx =
         if idx < 0 || idx >= Array.length pvalues then raise(System.IndexOutOfRangeException())
-        Map.findKey (fun n d -> idx >= d.index && idx < d.index+d.size) pdefs
+        Map.findKey (fun _ d -> idx >= d.index && idx < d.index+d.size) pdefs
 
     interface IParameters with
         member x.Count = pdefs.Count
@@ -217,7 +224,7 @@ and  Sampler private (logl: Parameters -> float,
                       runalt:int[], // number of alterations of individual parameters
                       runacc:int[] // number of accepted alterations of individual parameters
     ) =
-    static let log_prior pall values = Array.fold2 (fun sum d v -> d.prior v) 0. pall values
+    static let log_prior pall values = Array.fold2 (fun sum d v -> sum + d.prior v) 0. pall values
     static let make_pall (pp:Parameters) =
         let pall = Array.zeroCreate pp.CountValues
         for kv in pp.definitions do
@@ -243,12 +250,6 @@ and  Sampler private (logl: Parameters -> float,
             else 0.50*(def.upper - def.lower))
         let runalt = Array.create paramcount 0
         let runacc = Array.create paramcount 0
-        // init_counters
-        let metr_number_ok = 0
-        let pbacc = 0
-        let pbcount = 0
-        // init_bayestable
-        let bayestable = []
         // init_likelihood
         let ltotold = pp.SetValues values |> logl
         let ptotold =  log_prior pall values
@@ -390,7 +391,7 @@ and  Sampler private (logl: Parameters -> float,
                     (samples |> Seq.map (fun {logLikelihood=logl; logPrior=logp} -> logl+logp) |> Seq.max)
                     acceptanceRate
         printfn "------------+------------+------------+------------+------------+------------+------------+------------+"
-        printfn "       name |      lower |  lower 95%% |  lower 68%% |     median |  upper 68%% |  upper 95%% |      upper | prior"
+        printfn "       name |      lower |  lower 95%% |  lower 68%% |     median |  upper 68%% |  upper 95%% |      upper | isLog"
         printfn "------------+------------+------------+------------+------------+------------+------------+------------+"
         for idx in 0..sampler.Parameters.CountValues-1 do
             let q = qsummary (samples |> Seq.map (fun {values=sample} -> sample.[idx]))
@@ -401,6 +402,6 @@ and  Sampler private (logl: Parameters -> float,
                     (fullname.Substring(0,min 10 fullname.Length))
                     pdef.lower
                     q.lb95 q.lb68 q.median q.ub68 q.ub95
-                    pdef.upper pdef.prior
+                    pdef.upper pdef.isLog
             for off in 10..10..fullname.Length do
             printfn " %10s" (fullname.Substring(off,min 10 (fullname.Length-off)))

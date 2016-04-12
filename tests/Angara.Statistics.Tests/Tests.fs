@@ -1,6 +1,7 @@
 ﻿module statistics.Tests
 open NUnit.Framework
 open FsUnit
+open Swensen.Unquote.Assertions
 type Complex = System.Numerics.Complex
 
 open Angara.Statistics
@@ -119,38 +120,33 @@ let within_tests() =
 
 [<Test>]
 let ridders_tests() =
-    ridders 0. (-1.0, -2.0) (fun x -> x) |> should equal None
-    ridders 0. (1.0, 2.0) (fun x -> x) |> should equal None
-    ridders 0. (-2.0, -1.0) (fun x -> x) |> should equal None
-    ridders 0. (2.0, 1.0) (fun x -> x) |> should equal None
-    ridders 0. (1.0, 0.0) (fun x -> x) |> should equal (Some 0.0)
-    ridders 0. (0.0, 1.0) (fun x -> x) |> should equal (Some 0.0)
-    ridders 0. (-1.0, 1.0) (fun x -> x) |> should equal (Some 0.0)
-    ridders 0. (1.0, -1.0) (fun x -> x) |> should equal (Some 0.0)
+    ridders 0. (-1.0, -2.0) (fun x -> x) =! None
+    ridders 0. (1.0, 2.0) (fun x -> x) =! None
+    ridders 0. (-2.0, -1.0) (fun x -> x) =! None
+    ridders 0. (2.0, 1.0) (fun x -> x) =! None
+    ridders 0. (1.0, 0.0) (fun x -> x) =! (Some 0.0)
+    ridders 0. (0.0, 1.0) (fun x -> x) =! (Some 0.0)
+    ridders 0. (-1.0, 1.0) (fun x -> x) =! (Some 0.0)
+    ridders 0. (1.0, -1.0) (fun x -> x) =! (Some 0.0)
     // for linear function the solution is exact on the first iteration
-    ridders 0. (-1.0, 2.0) (fun x -> x) |> should equal (Some 0.0)
-    ridders 1e-5 (-1.0, 2.0) (fun x -> x) |> should equal (Some 0.0)
-    ridders 0. (1.0, -2.0) (fun x -> x) |> should equal (Some 0.0)
-    ridders 1e-5 (1.0, -2.0) (fun x -> x) |> should equal (Some 0.0)
+    ridders 0. (-1.0, 2.0) (fun x -> x) =! (Some 0.0)
+    ridders 1e-5 (-1.0, 2.0) (fun x -> x) =! (Some 0.0)
+    ridders 0. (1.0, -2.0) (fun x -> x) =! (Some 0.0)
+    ridders 1e-5 (1.0, -2.0) (fun x -> x) =! (Some 0.0)
     // quadratic function is well-behaved
-    ridders 0. (0.5, 2.0) (fun x -> x * (x-1.)) |> should equal (Some 1.0)
-    ridders 1e-5 (-1.0, 2.0) (fun x -> x) |> should equal (Some 0.0)
-    match ridders 1e-3 (0.5, 2.0) (fun x -> x * (x-1.)) with
-    | None -> Assert.Fail "should not be None"
-    | Some v -> v |> should (equalWithin 1e-3) 1.0
-    match ridders 1e-15 (0.5, 2.0) (fun x -> x * (x-1.)) with
-    | None -> Assert.Fail "should not be None"
-    | Some v -> v |> should (equalWithin 1e-15) 1.0
+    ridders 0. (0.5, 2.0) (fun x -> x * (x-1.)) =! (Some 1.0)
+    ridders 1e-5 (-1.0, 2.0) (fun x -> x) =! (Some 0.0)
+    let t1 = ridders 1e-3 (0.5, 2.0) (fun x -> x * (x-1.))
+    test <@ t1.IsSome && abs(t1.Value - 1.0) < 1e-3 @>
+    let t2 = ridders 1e-15 (0.5, 2.0) (fun x -> x * (x-1.))
+    test <@ t2.IsSome && abs(t2.Value - 1.0) < 1e-15 @>
     // check exit by within 1u
-    match ridders 0.0 (0.5, 2.0) (fun x -> if x < 1. then -1.0 else 1.0) with
-    | None -> Assert.Fail "should not be None"
-    | Some v -> 
-        v |> should not' (equal 1.)
-        within 1u v 1. |> should be True
+    let t3 = ridders 0.0 (0.5, 2.0) (fun x -> if x < 1. then -1.0 else 1.0)
+    test <@ t3.IsSome && t3.Value <> 1.0 &&  within 1u t3.Value 1. @>
     // check bisection branch when discriminant vanishes to 0
-    match ridders 0.0 (0.5, 2.0) (fun x -> (sqrt System.Double.Epsilon) * (x-1.)) with
-    | None -> Assert.Fail "should not be None"
-    | Some v ->  within 1u v 1. |> should be True
+    let f4 x = (sqrt System.Double.Epsilon) * (x-1.)
+    let t4 = ridders 0.0 (0.5, 2.0) f4
+    test <@ t4.IsSome && within 1u t4.Value 1. @>
 
 
 [<Test>]
@@ -199,3 +195,7 @@ let KernelDensityEstimation_Normal() =
                 0.40621277696505254
                 |]
     y |> should (equalWithin 1.e-12) ys'
+[<Test>]
+let const_tests() =
+    test <@ maxint+1.0 = maxint && maxint-1.0 < maxint @>
+    test <@ 1.0 - tolerance < 1.0 && 1.0 - 0.5*tolerance = 1.0 @>

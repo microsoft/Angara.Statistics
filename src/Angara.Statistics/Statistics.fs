@@ -6,11 +6,12 @@
 
 type Distribution = 
   | Uniform of float*float // lower bound, upper bound (> lower bound) -> continuous [lower bound to upper bound)
+  /// A uniform distribution in log space.
   | LogUniform of float*float // lower bound (> 0), upper bound (> lower bound) -> continuous [lower bound to upper bound)
   | Normal of float*float // mean, standard deviation (> 0) -> continuous (-infinity to infinity)
   | LogNormal of float*float // log mean, standard deviation of logarithm (> 0) -> continuous (0.0 to infinity)
   | Bernoulli of float // fraction of success [1e-16 to 1.0-1e-16] -> success/failure outcome, 1 or 0
-  /// the number of successes in a sequence of n independent yes/no experiments, each of which yields success with probability p.
+  /// A number of successes in a sequence of n independent yes/no experiments, each of which yields success with probability p.
   | Binomial of int*float // number of trials, probability of success -> number of successes, [0 to max_int]
   | NegativeBinomial of float*float // mean (0 to inf), number of failures or 'shape' for fractional values (0 to inf) -> number of successes, [0 to max_int]
   | Poisson of float // mean a.k.a. lambda [0, maxint] -> number of events [0 to maxint]
@@ -18,14 +19,17 @@ type Distribution =
   | Exponential of float // rate lambda (>0) -> continuaous [0 to infinity)
   | Mixture of (float*Distribution) list
 
+/// The smallest positive normalized `float` value
 let improbable = 2.2250738585072014E-308 // 2^(-1022)
+/// Logarithm of `improbable`
 let log_improbable = log(improbable) // -708
 
-/// 1.0 - tolerance < 1.0 && 1.0 - 0.5*tolerance = 1.0
+/// `1.0 - tolerance < 1.0 && 1.0 - 0.5*tolerance = 1.0`
 let tolerance = 1.1102230246251565E-16 // 2^(-53)
+/// Logarithm of `tolerance`
 let log_tolerance = log(tolerance) // -36.7
 
-/// maxint+1.0 = maxint && maxint-1.0 < maxint 
+/// Maximum exact integer `maxint+1.0 = maxint && maxint-1.0 < maxint` 
 let maxint = 1.0/tolerance; // 9e15 -- 6 orders of magnitude alrger than int.maxvalue
 
 /// π
@@ -37,7 +41,10 @@ let pi2 = 6.283185307179586476925286
 /// natural logarithm base
 let e = 2.71828182845904523536028747135266250
 
+/// sqrt 2π
 let sqrt2pi = sqrt(pi2)
+
+/// 1/2 * log 2π
 let log2pi = 0.5*log(pi2)
 
 let private isNan = System.Double.IsNaN
@@ -109,14 +116,14 @@ let private log_gamma x =
         t+log(2.5066282746310005*ser/x)
 
 // adopted from "Fast and Accurate Computation of Binomial Probabilities", C. Loader, 2000
-let sfe = Seq.unfold (fun (n, lognf) -> 
-    if n=0 then 
-        Some(0.0, (1,0.0))
-    elif n<16 then
-        let logn = log(float n)
-        Some(lognf+float(n)-log2pi-(float(n)-0.5)*logn, (n+1, lognf+logn)) 
-    else None) (0, 0.0) |> Array.ofSeq
-
+let private sfe =
+    Seq.unfold (fun (n, lognf) -> 
+        if n=0 then 
+            Some(0.0, (1,0.0))
+        elif n<16 then
+            let logn = log(float n)
+            Some(lognf+float(n)-log2pi-(float(n)-0.5)*logn, (n+1, lognf+logn)) 
+        else None) (0, 0.0) |> Array.ofSeq
 
 let private stirlerr n =
     if (n<16) then sfe.[n]
@@ -160,7 +167,8 @@ let private dpois(x: int, lb: float) =
     elif (x=0) then exp(-lb)
     else exp(-stirlerr(x)-bd0(float x,lb))/sqrt(pi2*float(x));
 
-let rec log_pdf d v = // log-probability distribution function
+/// Logarithm of a Probability Distribution Function
+let rec log_pdf d v =
     if System.Double.IsNaN(v) then log_improbable
     else
         let result =
@@ -605,7 +613,7 @@ let correlation (x:float[]) (y:float[]) =
 // adopted from MathNet.Numerics
 // https://github.com/mathnet/mathnet-numerics/blob/v3.9.0/src/Numerics/IntegralTransforms/Fourier.RadixN.cs
 
-type Complex = System.Numerics.Complex
+open System.Numerics
 
 let private InverseScaleByOptions(samples:Complex[]) =
     let scalingFactor = 1.0/(float samples.Length)
@@ -618,7 +626,7 @@ let private ForwardScaleByOptions(samples:Complex[]) =
         samples.[i] <- samples.[i] * Complex(scalingFactor, 0.)
 
 
-let Radix2Reorder(samples:'T[]) =
+let private Radix2Reorder(samples:'T[]) =
             let mutable j = 0
             for i in 0..samples.Length - 2 do
                 if (i < j) then
@@ -633,7 +641,7 @@ let Radix2Reorder(samples:'T[]) =
                     j <- j ^^^ m;
                     cont <- (j &&& m) = 0
 
-let Radix2Step(samples:Complex[], exponentSign:int, levelSize:int, k:int) =
+let private Radix2Step(samples:Complex[], exponentSign:int, levelSize:int, k:int) =
             // Twiddle Factor
             let exponent = (float exponentSign*float k)*pi/float levelSize
             let w = Complex(cos(exponent), sin(exponent))
@@ -644,7 +652,7 @@ let Radix2Step(samples:Complex[], exponentSign:int, levelSize:int, k:int) =
                 samples.[i] <- ai + t
                 samples.[i + levelSize] <- ai - t
 
-let Radix2(samples:Complex[], exponentSign:int) =
+let private Radix2(samples:Complex[], exponentSign:int) =
             let rec is_power_two x p =
                 if x = p then true
                 elif x < p then false
@@ -660,10 +668,8 @@ let Radix2(samples:Complex[], exponentSign:int) =
 
 
 let private fi x = float(x)
-let _i_ = Complex.ImaginaryOne
-let _ip_ = Complex(0.0,1.0)
 
-/// Inverse FFT
+/// Inverse Fast Fourier Transform.
 let ifft (xs:Complex[]) = 
     let samples = Array.copy xs
     Radix2(samples,1)
@@ -673,14 +679,15 @@ let ifft (xs:Complex[]) =
         samples.[i] <- Complex(scalingFactor * v.Real, scalingFactor * v.Imaginary)
     samples
 
-/// Fast Fourier transform 
+/// Fast Fourier transform. 
 let fft (xs:Complex[]) = 
     let samples = Array.copy xs
     Radix2(samples,-1)
     samples
 
-let (|Even|Odd|) input = if input % 2 = 0 then Even else Odd
+let private (|Even|Odd|) input = if input % 2 = 0 then Even else Odd
 
+/// Descrete cosine transform.
 let dct (rxs:float[]) = 
     let xs = Array.map (fun x -> Complex(x,0.0)) rxs
     let len = xs.Length
@@ -697,7 +704,7 @@ let dct (rxs:float[]) =
     Array.map2 (fun (a:Complex) (b:Complex) -> (a*b).Real) weights (fft interleaved)
 
 
-// Inverse discrete cosine transform.
+/// Inverse discrete cosine transform.
 // idct :: U.Vector CD -> U.Vector Double
 // http://hackage.haskell.org/package/statistics-0.10.0.0/docs/src/Statistics-Transform.html
 let idct (rxs:float[]) = 
@@ -720,7 +727,7 @@ let idct (rxs:float[]) =
 // Efficiently compute the next highest power of two for a
 // non-negative integer.  If the given value is already a power of
 // two, it is returned unchanged.  If negative, zero is returned.
-let nextHighestPowerOfTwo n =
+let private nextHighestPowerOfTwo n =
   let   i0   = n - 1
   let   i1   = i0  ||| (i0 >>> 1)
   let   i2   = i1  ||| (i1 >>> 2)
@@ -746,7 +753,7 @@ let histogram_ n xmin xmax xs =
     h
 
 /// Approximate comparison of two double values.
-/// Tolerance ulps is in units of least precision.
+/// Tolerance `ulps` is in units of least precision.
 let within (ulps:uint32) a b =
     // See e.g. "Comparing Floating Point Numbers, 2012 Edition" by  Bruce Dawson
     // https://randomascii.wordpress.com/2012/02/25/comparing-floating-point-numbers-2012-edition/
@@ -757,7 +764,7 @@ let within (ulps:uint32) a b =
     elif ai>=0L && bi<0L then cmp ai (System.Int64.MinValue-bi)
     else cmp ai bi 
 
-/// Use the method of Ridders to compute a root of a function.
+/// Root of a function using Ridders method.
 //   Ridders, C.F.J. (1979) A new algorithm for computing a single
 //   root of a real continuous function.
 //   /IEEE Transactions on Circuits and Systems/ 26:979--980.
@@ -780,7 +787,7 @@ let ridders tolerance (lb, ub) (f : float->float) =
         if d < tolerance then Some n else
         if n=a || n=b then
             // Ridder's approximation coincide with one of old bounds. Revert to bisection 
-            if 0.0 > fm*fa then iter a fa m fm (i+1)
+            if 0 > sign fm * sign fa then iter a fa m fm (i+1)
             else iter m fm b fb (i+1)
         else
         let fn = f n
@@ -799,8 +806,8 @@ let ridders tolerance (lb, ub) (f : float->float) =
 
 // from http://hackage.haskell.org/package/statistics-0.10.5.0/docs/src/Statistics-Sample-KernelDensity.html#kde
 //
-// Gaussian kernel density estimator for one-dimensional data, using
-// the method of Botev et al.
+/// Gaussian kernel density estimator for one-dimensional data, using
+/// the method of Botev et al.
 //
 // Botev. Z.I., Grotowski J.F., Kroese D.P. (2010). Kernel density estimation via diffusion. 
 // /Annals of Statistics/ 38(5):2916-2957. <http://arxiv.org/pdf/1011.2602>
@@ -867,8 +874,8 @@ let kde2 n0 min max (sample:float seq) =
             a0
         (mesh, density)
 
-// Gaussian kernel density estimator for one-dimensional data, using
-// the method of Botev et al.
+/// Gaussian kernel density estimator for one-dimensional data, using
+/// the method of Botev et al.
 //
 // The result is a pair of vectors, containing:
 //
