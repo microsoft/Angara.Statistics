@@ -18,7 +18,7 @@ Documentation: http://predictionmachines.github.io/Angara.Statistics
 
 Mono | .NET
 ---- | ----
-[![Mono CI Build Status](https://img.shields.io/travis/microsoft/Angara.Statistics/master.svg)](https://travis-ci.org/microsoft/Angara.Statistics) | [![.NET Build Status](https://img.shields.io/appveyor/ci/vassilyl/angara-statistics/master.svg)](https://ci.appveyor.com/project/vassilyl/angara-statistics)
+[![Mono CI Build Status](https://img.shields.io/travis/predictionmachines/Angara.Statistics/master.svg)](https://travis-ci.org/predictionmachines/Angara.Statistics) | [![.NET Build Status](https://img.shields.io/appveyor/ci/vassilyl/angara-statistics/master.svg)](https://ci.appveyor.com/project/vassilyl/angara-statistics)
 
 ## Maintainer(s)
 
