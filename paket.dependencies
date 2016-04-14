@@ -1,13 +1,5 @@
 source https://nuget.org/api/v2
-
-group Build
-  source https://nuget.org/api/v2
-  
-  nuget SourceLink.Fake
-  nuget FAKE
-  nuget FSharp.Formatting
-
-  github fsharp/FAKE modules/Octokit/Octokit.fsx
+nuget Angara.Serialization
 
 group Test
   source https://nuget.org/api/v2

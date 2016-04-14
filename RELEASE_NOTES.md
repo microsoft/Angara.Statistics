@@ -1,3 +1,7 @@
+### 0.1.4
+
+* Sampler state can be serialized to continue unfinished computation.
+
 ### 0.1.3 - 2016-04-12
 
 * Change layout of the repository to match [ProjectScaffold](http://fsprojects.github.io/ProjectScaffold/) recommendation.
