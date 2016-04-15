@@ -435,15 +435,40 @@ module Serialization =
             p.definitions |> Seq.toArray 
             |> Array.sortBy (fun kv -> kv.Value.index)
             |> Array.map (fun kv ->
-                InfoSet.Seq [
-                    InfoSet.String kv.Key
-                    InfoSet.Int kv.Value.size
-                    InfoSet.Double kv.Value.lower
-                    InfoSet.Double kv.Value.upper
-                    InfoSet.Int kv.Value.delay
-                    InfoSet.Bool kv.Value.isLog
-                    InfoSet.Bool kv.Value.isLog
+                Seq [
+                    String kv.Key
+                    Int kv.Value.size
+                    Double kv.Value.lower
+                    Double kv.Value.upper
+                    Int kv.Value.delay
+                    Bool kv.Value.isLog
+                    serializeDistribution kv.Value.prior
                     ])
         InfoSet.EmptyMap
-            .AddInfoSet("v",InfoSet.DoubleArray(p.values))
-            .AddInfoSet("p", InfoSet.Seq(pd))
+            .AddInfoSet("v", DoubleArray(p.values))
+            .AddInfoSet("p", Seq(pd))
+
+    let deserializeParameters (is:InfoSet) =
+        let invalidInfoSet() = invalidArg "is" "invalid InfoSet"
+        try
+            let (Map dict) = is
+            if dict.ContainsKey "v" && dict.ContainsKey "p" then
+                let (DoubleArray values) = dict.["v"]
+                let values' = Array.ofSeq values
+                let (Seq pd) = dict.["p"]
+                pd |> Seq.fold (fun (p:Parameters, index) (Seq args) ->
+                    let [
+                        String name
+                        Int size
+                        Double lower
+                        Double upper
+                        Int delay
+                        Bool isLog
+                        is_prior
+                        ] = List.ofSeq args
+                    p.Add(name, Array.sub values' index size, lower, upper, delay, isLog, deserializeDistribution is_prior), index+size
+                    ) (Parameters.Empty, 0)
+                    |> fst
+            else invalidInfoSet()
+        with :? MatchFailureException | :? System.IndexOutOfRangeException -> 
+            invalidInfoSet()
