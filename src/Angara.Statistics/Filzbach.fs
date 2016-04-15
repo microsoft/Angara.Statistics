@@ -12,32 +12,45 @@ type ParameterDefinition =
     lower: float
     /// An upper bound of parameter values.
     upper: float
+    /// Prior probability distribution of the parameter; all elements of a vector parameter reuse the same prior.
+    prior: Distribution
     /// When `isLog=true` the sampler transforms the parameter to logarithmic space.
     isLog: bool
+    /// A preset log_pdf of prior distribution; if isLog, then the first argument of prior is log-parameter.
+    /// This field automatically gets value from `prior`.
+    log_priordf: float -> float
     /// If `delay<1`, the sampler initializes the parameter value with a random number.
     /// If `delay=1`, the sampler starts with the value from the definition record.
     /// If `delay>1`, the sampler doesn't change the parameter value for the first 'delay' iterations.
     delay: int
-    /// log_pdf of prior distribution; if isLog, then the first argument of prior is log-parameter; all vector elements reuse the same prior.
-    prior: float -> float
     } 
     member x.isFixed = x.delay = System.Int32.MaxValue
     override x.Equals other =
         match other with
-        | :? ParameterDefinition as y -> y.index = x.index && y.size = x.size && y.lower = x.lower && x.upper = x.upper && y.isLog = x.isLog && y.delay = x.delay
+        | :? ParameterDefinition as y -> 
+            y.index = x.index && y.size = x.size && y.lower = x.lower && x.upper = x.upper 
+            && y.isLog = x.isLog && y.delay = x.delay && y.prior = x.prior
         | _ -> false
     override x.GetHashCode() =
-        x.index.GetHashCode() ^^^ x.size.GetHashCode() ^^^ x.lower.GetHashCode() ^^^ x.upper.GetHashCode() ^^^ x.isLog.GetHashCode() ^^^ x.delay.GetHashCode()
+        x.index.GetHashCode() ^^^ x.size.GetHashCode() ^^^ x.lower.GetHashCode() ^^^ x.upper.GetHashCode() 
+        ^^^ x.isLog.GetHashCode() ^^^ x.delay.GetHashCode() ^^^ x.prior.GetHashCode()
 
 type IParameters = System.Collections.Generic.IReadOnlyDictionary<string, float[]>
 
 /// A container for model parameters.
 type Parameters private (pdefs: Map<string,ParameterDefinition>, pvalues: float[]) =
-    let defaultLog isLog = defaultArg isLog false 
-    let defaultDelay delay = defaultArg delay 0
-    let uniformPrior _ = 0.
-    let normalPrior mu sigma v = let d = mu-v in -0.5*d*d/sigma
-    let defaultPrior prior = defaultArg prior uniformPrior
+    static let defaultLog isLog = defaultArg isLog false 
+    static let defaultDelay delay = defaultArg delay 0
+    static let uniformPrior _ = 0.
+    static let normalPrior mu sigma v = let d = mu-v in -0.5*d*d/sigma
+    static let log_priordf is_log prior =
+        match is_log, prior with
+        | false, Uniform(_,_)
+        | true, LogUniform(_,_) -> uniformPrior
+        | false, Normal(m,s) -> fun x -> let d = (x-m)/s in 0.5*d*d
+        | true, LogNormal(m,s) -> let log_m = log m in fun x -> let d = (x-log_m)/s in 0.5*d*d
+        | false, _ -> log_pdf prior
+        | true, _ -> fun x -> log_pdf prior (exp x)
     let avalue pdef = Array.sub pvalues pdef.index pdef.size
     let all = pdefs |> Seq.map (fun kv -> 
         System.Collections.Generic.KeyValuePair<string, float[]>(kv.Key, avalue kv.Value))
@@ -63,22 +76,27 @@ type Parameters private (pdefs: Map<string,ParameterDefinition>, pvalues: float[
             invalidArg "name" "parameters must have unique non-empty names."
         if Array.length values < 1 then
             invalidArg "values" "empty values array, each parameter must have at least one value."
-        if lower > upper then
-            invalidArg "lower" "lower must not be greater than upper."
+        let prior' = defaultArg prior (Uniform(lower, upper))
+        let lower' = match prior' with Uniform(a,b)|LogUniform(a,b) -> max a lower | _ -> lower
+        let upper' = match prior' with Uniform(a,b)|LogUniform(a,b) -> min b upper | _ -> upper
+        if lower' > upper' then
+            invalidArg "lower" (sprintf "lower %g must not be greater than upper %g." lower' upper')
         values |> Array.iteri (fun i v ->
-            if v < lower || v > upper then
+            if v < lower' || v > upper' then
                 invalidArg "values" (sprintf "values[%d] is out of [lower..upper] range" i))
-        if isLog.IsSome && isLog.Value && lower <= 0. then 
-            invalidArg "lower" "lower must not be greater than upper."
+        let isLog' = defaultLog isLog
+        if isLog' && lower' <= 0. then 
+            invalidArg "lower" "lower must be >0 because isLog=true."
         Parameters(
             pdefs |> Map.add name {
                 index = Array.length pvalues 
                 size = Array.length values
-                lower = lower
-                upper = upper
-                isLog = defaultLog isLog
+                lower = lower'
+                upper = upper'
+                isLog = isLog'
                 delay = (if lower=upper then -1 else defaultDelay delay)
-                prior = defaultPrior prior
+                prior = prior'
+                log_priordf = log_priordf isLog' prior'
                 }, 
             Array.append pvalues values)
     /// Add a fixed scalar parameter.
@@ -93,22 +111,22 @@ type Parameters private (pdefs: Map<string,ParameterDefinition>, pvalues: float[
         | Uniform(lower, upper) ->
             if upper<lower then invalidArg "prior" "in Uniform prior upper must not be less than lower" else
             if upper=lower then x.Add(name, lower) else
-            x.Add(name, Array.create theSize (0.5*(lower+upper)), lower, upper, 0, false, uniformPrior)
+            x.Add(name, Array.create theSize (0.5*(lower+upper)), lower, upper, 0, false, prior)
         | LogUniform(lower, upper) -> // isLog = true
             if lower <= 0. then invalidArg "prior" "in LogUniform prior lower must be > 0" else
             if upper<lower then invalidArg "prior" "in LogUniform prior upper must not be less than lower" else
             if upper=lower then x.Add(name, lower) else
-            x.Add(name, Array.create theSize (0.5*(lower+upper)), lower, upper, 0, true, uniformPrior)
+            x.Add(name, Array.create theSize (0.5*(lower+upper)), lower, upper, 0, true, prior)
         | Normal(mu, sigma) ->
             // the below [lower, upper] interval contain 0.99999 of prior probability
             if sigma <= 0. then invalidArg "prior" "in Normal prior sigma must be > 0" else
-            x.Add(name, Array.create theSize  mu, mu - 4.417 * sigma, mu + 4.417 * sigma, 0, false, normalPrior mu sigma)
+            x.Add(name, Array.create theSize  mu, mu - 4.417 * sigma, mu + 4.417 * sigma, 0, false, prior)
         | LogNormal(mu, sigma) -> // isLog = true
             // the below [lower, upper] interval contain 0.99999 of prior probability
             if mu <= 0. then invalidArg "prior" "in Normal prior mean must be > 0" else
             if sigma <= 0. then invalidArg "prior" "in Normal prior sigma must be > 0" else
             let logMu = log mu
-            x.Add(name, Array.create theSize mu, exp(logMu - 4.417 * sigma), exp(logMu + 4.417 * sigma), 0, true, normalPrior logMu sigma)
+            x.Add(name, Array.create theSize mu, exp(logMu - 4.417 * sigma), exp(logMu + 4.417 * sigma), 0, true, prior)
         | _ -> invalidArg "prior" "this method overload accepts only Uniform, LogUniform, Normal and LogNormal priors" 
 
     /// Add a parameter with a prior and starting values
@@ -118,22 +136,22 @@ type Parameters private (pdefs: Map<string,ParameterDefinition>, pvalues: float[
         | Uniform(lower, upper) ->
             if upper<lower then invalidArg "prior" "in Uniform prior upper must not be less than lower" else
             if upper=lower then x.Add(name, lower) else
-            x.Add(name, values, min lower (Array.min values), max upper (Array.max values), 1, false, uniformPrior)
+            x.Add(name, values, min lower (Array.min values), max upper (Array.max values), 1, false, prior)
         | LogUniform(lower, upper) -> // isLog = true
             if lower <= 0. then invalidArg "prior" "in LogUniform prior lower must be > 0" else
             if upper<lower then invalidArg "prior" "in LogUniform prior upper must not be less than lower" else
             if upper=lower then x.Add(name, lower) else
-            x.Add(name, values,  min lower (Array.min values), max upper (Array.max values), 1, true, uniformPrior)
+            x.Add(name, values,  min lower (Array.min values), max upper (Array.max values), 1, true, prior)
         | Normal(mu, sigma) ->
             // the below [lower, upper] interval contain 0.99999 of prior probability
             if sigma <= 0. then invalidArg "prior" "in Normal prior sigma must be > 0" else
-            x.Add(name, values, min (mu - 4.417 * sigma) (Array.min values), max (mu + 4.417 * sigma) (Array.max values), 1, false, normalPrior mu sigma)
+            x.Add(name, values, min (mu - 4.417 * sigma) (Array.min values), max (mu + 4.417 * sigma) (Array.max values), 1, false, prior)
         | LogNormal(mu, sigma) ->
             // the below [lower, upper] interval contain 0.99999 of prior probability
             if mu <= 0. then invalidArg "prior" "in Normal prior mean must be > 0" else
             if sigma <= 0. then invalidArg "prior" "in Normal prior sigma must be > 0" else
             let logMu = log mu
-            x.Add(name, values, min (exp(logMu - 4.417 * sigma)) (Array.min values), max (exp(logMu + 4.417 * sigma)) (Array.max values), 1, true, normalPrior logMu sigma)
+            x.Add(name, values, min (exp(logMu - 4.417 * sigma)) (Array.min values), max (exp(logMu + 4.417 * sigma)) (Array.max values), 1, true, prior)
         | _ -> invalidArg "prior" "this method overload accepts only Uniform, LogUniform, Normal and LogNormal priors" 
 
     /// Add a parameter.
@@ -142,7 +160,10 @@ type Parameters private (pdefs: Map<string,ParameterDefinition>, pvalues: float[
     /// The `dsply` argument is not used here.
     member x.Add(name, lb:float, ub:float, ``val``:float, ``type``, ``fixed``, dsply:int, ?number) =
         let size = defaultArg number 1
-        x.Add(name, Array.create size ``val``, lb, ub, (if ``fixed`` = 0 then 0 else System.Int32.MaxValue), ``type`` <> 0, uniformPrior)
+        if ``type`` = 0 then
+            x.Add(name, Array.create size ``val``, lb, ub, (if ``fixed`` = 0 then 0 else System.Int32.MaxValue), false, Uniform(lb, ub))
+        else
+            x.Add(name, Array.create size ``val``, lb, ub, (if ``fixed`` = 0 then 0 else System.Int32.MaxValue), true, LogUniform(lb,ub))
 
     /// Replaces all parameter values.
     /// For a parameter `"p"` the parameter values are at index `x.GetDefinition("p").index` in the `values` array.
@@ -224,7 +245,7 @@ and  Sampler private (logl: Parameters -> float,
                       runalt:int[], // number of alterations of individual parameters
                       runacc:int[] // number of accepted alterations of individual parameters
     ) =
-    static let log_prior pall values = Array.fold2 (fun sum d v -> sum + d.prior v) 0. pall values
+    static let log_prior pall values = Array.fold2 (fun sum d v -> sum + d.log_priordf v) 0. pall values
     static let make_pall (pp:Parameters) =
         let pall = Array.zeroCreate pp.CountValues
         for kv in pp.definitions do

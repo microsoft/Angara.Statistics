@@ -110,6 +110,7 @@
   <ItemGroup>
     <Compile Include="Tests.fs" />
     <Compile Include="FilzbachTests.fs" />
+    <Compile Include="SerializationTests.fs" />
     <None Include="paket.references" />
     <Content Include="App.config" />
   </ItemGroup>
