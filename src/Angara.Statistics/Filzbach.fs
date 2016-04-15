@@ -42,7 +42,6 @@ type Parameters private (pdefs: Map<string,ParameterDefinition>, pvalues: float[
     static let defaultLog isLog = defaultArg isLog false 
     static let defaultDelay delay = defaultArg delay 0
     static let uniformPrior _ = 0.
-    static let normalPrior mu sigma v = let d = mu-v in -0.5*d*d/sigma
     static let log_priordf is_log prior =
         match is_log, prior with
         | false, Uniform(_,_)
@@ -426,3 +425,25 @@ and  Sampler private (logl: Parameters -> float,
                     pdef.upper pdef.isLog
             for off in 10..10..fullname.Length do
             printfn " %10s" (fullname.Substring(off,min 10 (fullname.Length-off)))
+
+module Serialization =
+    open Angara.Serialization
+    open Angara.Statistics.Serialization
+
+    let serializeParameters (p:Parameters) = 
+        let pd = 
+            p.definitions |> Seq.toArray 
+            |> Array.sortBy (fun kv -> kv.Value.index)
+            |> Array.map (fun kv ->
+                InfoSet.Seq [
+                    InfoSet.String kv.Key
+                    InfoSet.Int kv.Value.size
+                    InfoSet.Double kv.Value.lower
+                    InfoSet.Double kv.Value.upper
+                    InfoSet.Int kv.Value.delay
+                    InfoSet.Bool kv.Value.isLog
+                    InfoSet.Bool kv.Value.isLog
+                    ])
+        InfoSet.EmptyMap
+            .AddInfoSet("v",InfoSet.DoubleArray(p.values))
+            .AddInfoSet("p", InfoSet.Seq(pd))

@@ -718,8 +718,8 @@ let idct (rxs:float[]) =
     let interleave z =
         let hz = z >>> 1
         match z with
-            | Even(z) -> vals.[hz]
-            | Odd(z) -> vals.[len - hz - 1]
+            | Even _ -> vals.[hz]
+            | Odd _ -> vals.[len - hz - 1]
     [| for i in 0..len-1 do yield interleave(i) |]
 
 // http://hackage.haskell.org/package/statistics-0.10.5.0/docs/src/Statistics-Function.html#nextHighestPowerOfTwo
@@ -906,3 +906,49 @@ let kde n0 (xs:float seq) =
                        min <- xsi)
                 if min >= max then 1.0 else max - min
         kde2 n0 (min - range/10.0) (max + range/10.0) xs
+
+module Serialization =
+    open Angara.Serialization
+
+    let rec serializeDistribution (d:Distribution) =
+        let islist =
+            match d with
+            | Uniform(lower,upper) -> [String "U"; Double lower; Double upper]
+            | LogUniform(lower,upper) -> [String "LU"; Double lower; Double upper]
+            | Normal(mean, stdev) -> [String "N"; Double mean; Double stdev]
+            | LogNormal(mean, stdev) -> [String "LN"; Double mean; Double stdev]
+            | Gamma(a, b) -> [String "G"; Double a; Double b]
+            | Binomial(n, p) -> [String "B"; Int n; Double p]
+            | NegativeBinomial(mean, r) -> [String "NB"; Double mean; Double r]
+            | Bernoulli(p) -> [String "C"; Double p]
+            | Exponential(mean) -> [String "E"; Double mean]
+            | Poisson(mean) -> [String "P"; Double mean]
+            | Mixture(components) ->
+                let cc = components |> List.map (fun (weight, c) ->
+                    Seq [Double weight; serializeDistribution c])
+                [String "M"; Seq(cc)]
+        Seq islist
+           
+    let rec deserializeDistribution (is:InfoSet) =
+        try
+            let (Seq content) = is
+            let tag::args = content |> List.ofSeq
+            match tag.ToStringValue() with
+            | "U" -> let [Double lower; Double upper] = args in Uniform(lower, upper)
+            | "LU" -> let [Double lower; Double upper] = args in LogUniform(lower, upper)
+            | "N" -> let [Double mean; Double stdev] = args in Normal(mean, stdev)
+            | "LN" -> let [Double mean; Double stdev] = args in LogNormal(mean, stdev)
+            | "G" -> let [Double a; Double b] = args in Gamma(a, b)
+            | "NB" -> let [Double mean; Double r] = args in NegativeBinomial(mean, r)
+            | "B" -> let [Int n; Double p] = args in Binomial(n, p)
+            | "C" -> let [Double p] = args in Bernoulli(p)
+            | "E" -> let [Double p] = args in Exponential(p)
+            | "P" -> let [Double p] = args in Poisson(p)
+            | "M" ->
+                let [Seq is_components] = args
+                let components = 
+                    is_components 
+                    |> Seq.map (fun (Seq is_c) -> let [Double weight; is_d] = List.ofSeq is_c in weight, deserializeDistribution is_d)
+                    |> List.ofSeq
+                Mixture components
+        with :? MatchFailureException -> invalidArg "is" "Invalid infoSet"

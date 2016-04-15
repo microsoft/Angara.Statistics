@@ -46,7 +46,6 @@
   <ItemGroup>
     <Compile Include="Statistics.fs" />
     <Compile Include="Filzbach.fs" />
-    <Compile Include="Serialization.fs" />
     <Compile Include="AssemblyInfo.fs" />
     <None Include="paket.references" />
     <None Include="paket.template" />
