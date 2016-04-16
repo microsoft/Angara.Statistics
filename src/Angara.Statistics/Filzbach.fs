@@ -230,8 +230,7 @@ type Sample = {values:float[]; logLikelihood:float; logPrior:float}
 type SamplerResult = {sampler:Sampler; samples:Sample seq; acceptanceRate: float}
 
 /// An immutable state of Filzbach MCMC sampler.
-and  Sampler private (logl: Parameters -> float,
-                      // utilities
+and  Sampler private (// utilities
                       pall: ParameterDefinition[],
                       // variables
                       metr_k: int,
@@ -275,9 +274,9 @@ and  Sampler private (logl: Parameters -> float,
         let ptotold =  log_prior pall values
         // initialize iteration number
         let metr_k = 1
-        Sampler(logl, pall, metr_k, rng, pp.SetValues values, deltas, ltotold, ptotold, false, runalt, runacc)
+        Sampler(pall, metr_k, rng, pp.SetValues values, deltas, ltotold, ptotold, false, runalt, runacc)
 
-    member x.Probe(isBurnIn:bool) =
+    member x.Probe(isBurnIn:bool, logl: Parameters -> float) =
         let paramcount = pall.Length
         let rng = MT19937(rng)
         let values = Array.copy pp.values
@@ -289,7 +288,7 @@ and  Sampler private (logl: Parameters -> float,
         let alterable = [for i in 0..paramcount-1 do if pall.[i].delay < metr_k then yield i]
         let freeparamcount = alterable.Length
         if freeparamcount=0 then 
-            Sampler(logl, pall, metr_k+1, rng, pp, deltas, ltotold, ptotold, accept, runalt, runacc)
+            Sampler(pall, metr_k+1, rng, pp, deltas, ltotold, ptotold, accept, runalt, runacc)
         else
         let alt = // chain_params[i].alt=1 ~ alt |> List.any (fun item -> item=i)
             if freeparamcount=1 then alterable // one parameter always alters
@@ -376,9 +375,9 @@ and  Sampler private (logl: Parameters -> float,
                     runacc.[ii] <- 0
 
         if (accept) then
-            Sampler(logl, pall, metr_k+1, rng, pp.SetValues values, deltas, ltotnew, ptotnew, accept, runalt, runacc)
+            Sampler(pall, metr_k+1, rng, pp.SetValues values, deltas, ltotnew, ptotnew, accept, runalt, runacc)
         else
-            Sampler(logl, pall, metr_k+1, rng, pp, deltas, ltotold, ptotold, accept, runalt, runacc)
+            Sampler(pall, metr_k+1, rng, pp, deltas, ltotold, ptotold, accept, runalt, runacc)
 
     member x.Parameters = pp
     member x.LogLikelihood = ltotold
@@ -393,14 +392,14 @@ and  Sampler private (logl: Parameters -> float,
         // initialize sampler
         let mutable sampler = Sampler.Create(pp, rng, logl)
         // do burn-in iterations
-        for _ in 1..burnCount do sampler <- sampler.Probe(true)
+        for _ in 1..burnCount do sampler <- sampler.Probe(true, logl)
         // collect sampleCount samples
         let mutable countAccepted = 0
         let samples = 
             [
             for _ in 1..sampleCount ->
                 for _ in 1..thinning do
-                    sampler <- sampler.Probe(false)
+                    sampler <- sampler.Probe(false, logl)
                     if sampler.IsAccepted then countAccepted <- countAccepted + 1
                 {values=Array.copy sampler.Parameters.values; logLikelihood = sampler.LogLikelihood; logPrior = sampler.LogPrior}
             ]
