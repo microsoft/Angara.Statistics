@@ -952,3 +952,9 @@ module Serialization =
                     |> List.ofSeq
                 Mixture components
         with :? MatchFailureException -> invalidArg "is" "Invalid infoSet"
+
+    type DistributionSerializer() =
+        interface ISerializer<Distribution> with
+            member x.TypeId = "ProbDist"
+            member x.Serialize _ d = serializeDistribution d
+            member x.Deserialize _ is = deserializeDistribution is

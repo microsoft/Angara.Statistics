@@ -472,3 +472,9 @@ module Serialization =
             else invalidInfoSet()
         with :? MatchFailureException | :? System.IndexOutOfRangeException -> 
             invalidInfoSet()
+
+    type ParametersSerializer() =
+        interface ISerializer<Parameters> with
+            member x.TypeId = "FilzP"
+            member x.Serialize _ p = serializeParameters p
+            member x.Deserialize _ is = deserializeParameters is
