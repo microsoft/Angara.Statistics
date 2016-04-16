@@ -39,11 +39,23 @@ let DistributionSerialization() =
 let MersenneTwisterSerialization() =
     let lib = SerializerLibrary.CreateDefault()
     lib.Register(MersenneTwisterSerializer())
-    let check d =
-        let is = serializeDistribution d
-        d =! deserializeDistribution is
-        let json = Json.FromObject(lib,d).ToString()
-        d =! Json.ToObject(Newtonsoft.Json.Linq.JObject.Parse json,lib)
+    let check2 (mt1:MT19937) (mt2:MT19937) =
+        mt1.uniform_uint32() =! mt2.uniform_uint32()
+        mt1.uniform_float64() =! mt2.uniform_float64()
+        mt1.normal() =! mt2.normal()
+        mt1.uniform_uint32() =! mt2.uniform_uint32()
+    let check mt =
+        let is =  serializeMersenneTwister mt
+        let json = Json.FromObject(lib,mt).ToString()
+        check2 (MT19937(mt)) (deserializeMersenneTwister is)
+        check2 (MT19937(mt)) (Json.ToObject(Newtonsoft.Json.Linq.JObject.Parse json,lib))
+    let mutable mt = MT19937()
+    for _ in 1..4 do
+        let seed = mt.get_seed()
+        check2 mt (MT19937(seed))
+        check (MT19937(seed))
+        mt <- MT19937(seed)
+        mt.uniform_uint32() |> ignore
 
 [<Test>]
 let ParametersSerialization() =

@@ -953,6 +953,22 @@ module Serialization =
                 Mixture components
         with :? MatchFailureException -> invalidArg "is" "Invalid infoSet"
 
+    let serializeMersenneTwister (mt:MT19937) =
+        let seed = mt.get_seed()
+        use buffer = new System.IO.MemoryStream (seed.Length*4)
+        use writer = new System.IO.BinaryWriter(buffer)
+        seed |> Array.iter writer.Write
+        ByteArray(buffer.GetBuffer())
+
+    let deserializeMersenneTwister is =
+        match is with
+        | ByteArray byteseq ->
+            let buffer = Array.ofSeq byteseq
+            use reader = new System.IO.BinaryReader(new System.IO.MemoryStream (buffer))
+            let seed = Array.init (buffer.Length/4) (fun _ -> reader.ReadUInt32())
+            MT19937 seed
+        | _ -> invalidArg "is" "Invalid InfoSet"
+
     type DistributionSerializer() =
         interface ISerializer<Distribution> with
             member x.TypeId = "ProbDist"
@@ -962,16 +978,5 @@ module Serialization =
     type MersenneTwisterSerializer() =
         interface ISerializer<MT19937> with
             member x.TypeId = "MeresenneTwister"
-            member x.Serialize _ g =
-                let seed = g.get_seed()
-                use buffer = System.IO.MemoryStream (seed.Length*4)
-                use writer = System.IO.BinaryWriter buffer
-                seed |> Array.iter writer.Write
-                ByteArray(buffer.GetBuffer())
-            member x.Deserialize _ is =
-                match InfoSet.TryGetByteArray is with
-                | None -> invalidArg "is" "Invalid InfoSet"
-                | Some buffer ->
-                    use reader = System.IO.BinaryReader(new System.IO.MemoryStream buffer)
-                    let seed = Array.init (buffer.Length/4) (fun _ -> reader.ReadUInt32())
-                    MT19937 seed
+            member x.Serialize _ mt = serializeMersenneTwister mt
+            member x.Deserialize _ is = deserializeMersenneTwister is

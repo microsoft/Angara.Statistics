@@ -253,13 +253,14 @@ and  Sampler private (// utilities
                 pall.[index+offset] <- pdef
         pall
 
-    static member Restore(pp: Parameters, rng: MT19937, detlas, ltotold, ptotold, accept, runalt, runacc) =
-        // init_chains
+    static member Restore(metr_k, rng, pp, deltas, ltotold, ptotold, accept, runalt, runacc) =
         let pall = make_pall pp
-        let paramcount = pall.Length
         Sampler(pall, metr_k, rng, pp, deltas, ltotold, ptotold, accept, runalt, runacc)
         
     static member Create(pp: Parameters, rng: MT19937, logl: Parameters -> float) =
+        // init_chains
+        let pall = make_pall pp
+        let paramcount = pall.Length
         // initRandomValues
         let values = pall |> Array.mapi (fun i def ->
             if def.delay<1 
@@ -276,7 +277,7 @@ and  Sampler private (// utilities
         let ltotold = pp.SetValues values |> logl
         let ptotold =  log_prior pall values
         // initialize iteration number
-        Restore(1, rng, pp.SetValues values, deltas, ltotold, ptotold, false, runalt, runacc)
+        Sampler.Restore(1, rng, pp.SetValues values, deltas, ltotold, ptotold, false, runalt, runacc)
 
     member x.Probe(isBurnIn:bool, logl: Parameters -> float) =
         let paramcount = pall.Length
