@@ -958,3 +958,20 @@ module Serialization =
             member x.TypeId = "ProbDist"
             member x.Serialize _ d = serializeDistribution d
             member x.Deserialize _ is = deserializeDistribution is
+
+    type MersenneTwisterSerializer() =
+        interface ISerializer<MT19937> with
+            member x.TypeId = "MeresenneTwister"
+            member x.Serialize _ g =
+                let seed = g.get_seed()
+                use buffer = System.IO.MemoryStream (seed.Length*4)
+                use writer = System.IO.BinaryWriter buffer
+                seed |> Array.iter writer.Write
+                ByteArray(buffer.GetBuffer())
+            member x.Deserialize _ is =
+                match InfoSet.TryGetByteArray is with
+                | None -> invalidArg "is" "Invalid InfoSet"
+                | Some buffer ->
+                    use reader = System.IO.BinaryReader(new System.IO.MemoryStream buffer)
+                    let seed = Array.init (buffer.Length/4) (fun _ -> reader.ReadUInt32())
+                    MT19937 seed

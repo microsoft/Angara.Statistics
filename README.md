@@ -1,10 +1,8 @@
 [![Issue Stats](http://issuestats.com/github/microsoft/Angara.Statistics/badge/issue)](http://issuestats.com/github/microsoft/Angara.Statistics)
 [![Issue Stats](http://issuestats.com/github/microsoft/Angara.Statistics/badge/pr)](http://issuestats.com/github/microsoft/Angara.Statistics)
 
-# Angara.Statistics
-
 Angara.Statistics
-======================
+=================
 
 A collection of essential algorithms for Bayesian data constrained modelling.
 Includes Mersenne twister random number generator, common probability distributions,

@@ -36,6 +36,16 @@ let DistributionSerialization() =
     raises<System.ArgumentException> <@ deserializeDistribution (InfoSet.Double 1.) @>
 
 [<Test>]
+let MersenneTwisterSerialization() =
+    let lib = SerializerLibrary.CreateDefault()
+    lib.Register(MersenneTwisterSerializer())
+    let check d =
+        let is = serializeDistribution d
+        d =! deserializeDistribution is
+        let json = Json.FromObject(lib,d).ToString()
+        d =! Json.ToObject(Newtonsoft.Json.Linq.JObject.Parse json,lib)
+
+[<Test>]
 let ParametersSerialization() =
     let lib = SerializerLibrary.CreateDefault()
     lib.Register(ParametersSerializer())
