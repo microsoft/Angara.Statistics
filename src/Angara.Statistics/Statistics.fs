@@ -476,8 +476,8 @@ type MT19937 private (
         else
             let state = init_by_array(seed)
             MT19937(state, N)
-    member private x.getMt = mt
-    member private x.getIdx = idx
+    member private x.getMt = Array.copy mt
+    member private x.getIdx = mti
     new(copy:MT19937) =
         MT19937(copy.getMt, copy.getIdx)
 

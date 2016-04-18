@@ -199,3 +199,10 @@ let KernelDensityEstimation_Normal() =
 let const_tests() =
     test <@ maxint+1.0 = maxint && maxint-1.0 < maxint @>
     test <@ 1.0 - tolerance < 1.0 && 1.0 - 0.5*tolerance = 1.0 @>
+
+[<Test>]
+let Mersenne_twister_copy_constructor() =
+    let mt = MT19937()
+    mt.normal() |> ignore
+    let mt_copy = MT19937(mt)
+    test <@ mt.uniform_uint32() = mt_copy.uniform_uint32() @>
