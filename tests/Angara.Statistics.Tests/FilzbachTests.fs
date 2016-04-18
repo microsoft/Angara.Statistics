@@ -1,6 +1,7 @@
 ﻿module FilzbachTests
 open NUnit.Framework
 open FsUnit
+open Swensen.Unquote
 
 open Angara.Filzbach
 
@@ -121,4 +122,43 @@ let ParametersTests() =
     (p4:>IParameters).Keys |> Seq.toList |> should equal ["s";"v"]
     (p4:>IParameters).Values |> Seq.toList |> should equal [[|0.5|]; [|0.6;0.7|]]
 
+[<Test>]
+let SamplerTests() =
+    let mt = Angara.Statistics.MT19937()
+    let logl (_:Parameters) = log(1.-mt.uniform_float64())
+    let sample = Sampler.Create(Parameters.Empty, mt, logl)
+    test <@ Seq.isEmpty sample.Parameters.AllValues @>
+    test <@ Seq.isEmpty (sample.Probe(true, logl).Parameters.AllValues) @>
+    let s2 = Sampler.Create(Parameters.Empty.Add("a",1.), mt, logl)
+    test <@ s2.Parameters.AllValues |> Seq.toList = [1.] @>
+    test <@ s2.Probe(true, logl).Parameters.AllValues |> Seq.toList = [1.] @>
+    let s3 = Sampler.Create(Parameters.Empty.Add("a",Angara.Statistics.Uniform(1.,2.)), mt, logl)
+    let [v3] = s3.Parameters.AllValues |> Seq.toList
+    test <@  v3 > 1. && v3 < 2. @>
+    let s3' = s3 |> Seq.unfold (fun s -> if s.IsAccepted then None else let s' = s.Probe(false,logl) in Some (s',s')) |> Seq.last
+    let [v3'] = s3'.Parameters.AllValues |> Seq.toList
+    test <@ s3'.IsAccepted && (v3 <> v3') @>
+    let s3'' = s3 |> Seq.unfold (fun s -> if s.IsAccepted then None else let s' = s.Probe(true,logl) in Some (s',s')) |> Seq.last
+    let [v3''] = s3''.Parameters.AllValues |> Seq.toList
+    test <@ s3''.IsAccepted && (v3 <> v3'') @>
 
+    let s4 = Sampler.Create(Parameters.Empty.Add("a",Angara.Statistics.Uniform(1.,2.)).Add("b",3.), mt, logl)
+    let [v4;v41] = s4.Parameters.AllValues |> Seq.toList
+    test <@  v41 = 3. && v4 > 1. && v4 < 2. @>
+    let s4' = s4 |> Seq.unfold (fun s -> if s.IsAccepted then None else let s' = s.Probe(false,logl) in Some (s',s')) |> Seq.last
+    let [v4';v41'] = s4'.Parameters.AllValues |> Seq.toList
+    test <@ v41' = 3. && s4'.IsAccepted && (v4 <> v4') @>
+    let s4'' = s4 |> Seq.unfold (fun s -> if s.IsAccepted then None else let s' = s.Probe(true,logl) in Some (s',s')) |> Seq.last
+    let [v4'';v41''] = s4''.Parameters.AllValues |> Seq.toList
+    test <@ v41'' = 3. && s4''.IsAccepted && (v4 <> v4'') @>
+
+    let s5 = Sampler.Create(Parameters.Empty.Add("b",[|3.;3.1|]).Add("a",Angara.Statistics.Uniform(1.,2.)), mt, logl)
+    let [v51;v52;v5] = s5.Parameters.AllValues |> Seq.toList
+    test <@  v51 = 3. && v52 = 3.1 && v5 > 1. && v5 < 2. @>
+    let s5' = s5 |> Seq.unfold (fun s -> if s.IsAccepted then None else let s' = s.Probe(false,logl) in Some (s',s')) |> Seq.last
+    let [v51';v52';v5'] = s5'.Parameters.AllValues |> Seq.toList
+    test <@ v51' = 3. && v52' = 3.1 && s5'.IsAccepted && (v5 <> v5') @>
+    let s5'' = s5 |> Seq.unfold (fun s -> if s.IsAccepted then None else let s' = s.Probe(true,logl) in Some (s',s')) |> Seq.last
+    let [v51'';v52'';v5''] = s5''.Parameters.AllValues |> Seq.toList
+    test <@ v51'' = 3. && v52'' = 3.1 && s5''.IsAccepted && (v5 <> v5'') @>
+    

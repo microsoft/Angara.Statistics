@@ -93,7 +93,7 @@ type Parameters private (pdefs: Map<string,ParameterDefinition>, pvalues: float[
                 lower = lower'
                 upper = upper'
                 isLog = isLog'
-                delay = (if lower=upper then -1 else defaultDelay delay)
+                delay = (if lower=upper then System.Int32.MaxValue else defaultDelay delay)
                 prior = prior'
                 log_priordf = log_priordf isLog' prior'
                 }, 
@@ -230,7 +230,7 @@ type Sample = {values:float[]; logLikelihood:float; logPrior:float}
 type SamplerResult = {sampler:Sampler; samples:Sample seq; acceptanceRate: float}
 
 /// An immutable state of Filzbach MCMC sampler.
-and  Sampler private (// utilities
+and Sampler private (// utilities
                       pall: ParameterDefinition[],
                       // variables
                       metr_k: int,
@@ -245,22 +245,27 @@ and  Sampler private (// utilities
     ) =
     static let log_prior pall values = Array.fold2 (fun sum d v -> sum + d.log_priordf v) 0. pall values
     static let make_pall (pp:Parameters) =
-        let pall = Array.zeroCreate pp.CountValues
-        for kv in pp.definitions do
-            let pdef = kv.Value
-            let index = pdef.index
-            for offset in 0..pdef.size-1 do
-                pall.[index+offset] <- pdef
-        pall
+//        let pall = Array.zeroCreate pp.CountValues
+//        for kv in pp.definitions do
+//            let pdef = kv.Value
+//            let index = pdef.index
+//            for offset in 0..pdef.size-1 do
+//                pall.[index+offset] <- pdef
+//        pall
+        Array.init pp.CountValues (fun i -> pp.GetName i |> pp.GetDefinition)
 
-    static member Restore(metr_k, rng, pp, deltas, ltotold, ptotold, accept, runalt, runacc) =
-        let pall = make_pall pp
+    member private x.Equals (that_metr_k, that_rng:MT19937, that_pp, that_deltas, that_ltotold, that_ptotold, that_accept, that_runalt, that_runacc) =
+        that_metr_k = metr_k && that_rng.get_seed() = rng.get_seed() && that_pp = pp && that_deltas = deltas && that_ltotold = ltotold 
+        && that_ptotold = ptotold && that_accept = accept && that_runalt = runalt && that_runacc = runacc
+
+    static member Restore(metr_k, rng, (pp:Parameters), deltas, ltotold, ptotold, accept, runalt, runacc) =
+        let pall = Array.init pp.CountValues (fun i -> pp.GetName i |> pp.GetDefinition)
         Sampler(pall, metr_k, rng, pp, deltas, ltotold, ptotold, accept, runalt, runacc)
         
     static member Create(pp: Parameters, rng: MT19937, logl: Parameters -> float) =
         // init_chains
-        let pall = make_pall pp
-        let paramcount = pall.Length
+        let paramcount = pp.CountValues
+        let pall = Array.init paramcount (fun i -> pp.GetName i |> pp.GetDefinition)
         // initRandomValues
         let values = pall |> Array.mapi (fun i def ->
             if def.delay<1 
