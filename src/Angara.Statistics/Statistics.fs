@@ -930,28 +930,37 @@ module Serialization =
         Seq islist
            
     let rec deserializeDistribution (is:InfoSet) =
-        try
-            let (Seq content) = is
-            let tag::args = content |> List.ofSeq
-            match tag.ToStringValue() with
-            | "U" -> let [Double lower; Double upper] = args in Uniform(lower, upper)
-            | "LU" -> let [Double lower; Double upper] = args in LogUniform(lower, upper)
-            | "N" -> let [Double mean; Double stdev] = args in Normal(mean, stdev)
-            | "LN" -> let [Double mean; Double stdev] = args in LogNormal(mean, stdev)
-            | "G" -> let [Double a; Double b] = args in Gamma(a, b)
-            | "NB" -> let [Double mean; Double r] = args in NegativeBinomial(mean, r)
-            | "B" -> let [Int n; Double p] = args in Binomial(n, p)
-            | "C" -> let [Double p] = args in Bernoulli(p)
-            | "E" -> let [Double p] = args in Exponential(p)
-            | "P" -> let [Double p] = args in Poisson(p)
-            | "M" ->
-                let [Seq is_components] = args
-                let components = 
-                    is_components 
-                    |> Seq.map (fun (Seq is_c) -> let [Double weight; is_d] = List.ofSeq is_c in weight, deserializeDistribution is_d)
-                    |> List.ofSeq
-                Mixture components
-        with :? MatchFailureException -> invalidArg "is" "Invalid infoSet"
+        let invalidInfoSet() = invalidArg "is" "invalid InfoSet"
+        match is with
+        | Seq content ->
+            match content |> List.ofSeq with
+            | tag::args ->
+                match tag.ToStringValue() with
+                | "U" -> match args with [Double lower; Double upper] -> Uniform(lower, upper) | _ -> invalidInfoSet()
+                | "LU" -> match args with [Double lower; Double upper]-> LogUniform(lower, upper) | _ -> invalidInfoSet()
+                | "N" -> match args with [Double mean; Double stdev]-> Normal(mean, stdev) | _ -> invalidInfoSet()
+                | "LN" -> match args with [Double mean; Double stdev]-> LogNormal(mean, stdev) | _ -> invalidInfoSet()
+                | "G" -> match args with [Double a; Double b]-> Gamma(a, b) | _ -> invalidInfoSet()
+                | "NB" -> match args with [Double mean; Double r]-> NegativeBinomial(mean, r) | _ -> invalidInfoSet()
+                | "B" -> match args with [Int n; Double p]-> Binomial(n, p) | _ -> invalidInfoSet()
+                | "C" -> match args with [Double p]-> Bernoulli(p) | _ -> invalidInfoSet()
+                | "E" -> match args with [Double p]-> Exponential(p) | _ -> invalidInfoSet()
+                | "P" -> match args with [Double p]-> Poisson(p) | _ -> invalidInfoSet()
+                | "M" ->
+                    match args with 
+                    | [Seq is_components] ->
+                        let components = 
+                            is_components 
+                            |> Seq.map (function 
+                                | (Seq is_c) -> 
+                                    match List.ofSeq is_c with  [Double weight; is_d] -> weight, deserializeDistribution is_d | _ -> invalidInfoSet()
+                                | _ -> invalidInfoSet())
+                            |> List.ofSeq
+                        Mixture components
+                    | _ -> invalidInfoSet()
+                | _ -> invalidInfoSet()
+            | _ -> invalidInfoSet()
+        | _ -> invalidInfoSet()
 
     let serializeMersenneTwister (mt:MT19937) =
         let seed = mt.get_seed()

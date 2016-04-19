@@ -76,8 +76,8 @@ type Parameters private (pdefs: Map<string,ParameterDefinition>, pvalues: float[
         if Array.length values < 1 then
             invalidArg "values" "empty values array, each parameter must have at least one value."
         let prior' = defaultArg prior (Uniform(lower, upper))
-        let lower' = match prior' with Uniform(a,b)|LogUniform(a,b) -> max a lower | _ -> lower
-        let upper' = match prior' with Uniform(a,b)|LogUniform(a,b) -> min b upper | _ -> upper
+        let lower' = match prior' with Uniform(a,_)|LogUniform(a,_) -> max a lower | _ -> lower
+        let upper' = match prior' with Uniform(_,b)|LogUniform(_,b) -> min b upper | _ -> upper
         if lower' > upper' then
             invalidArg "lower" (sprintf "lower %g must not be greater than upper %g." lower' upper')
         values |> Array.iteri (fun i v ->
@@ -158,6 +158,7 @@ type Parameters private (pdefs: Map<string,ParameterDefinition>, pvalues: float[
     /// described in [Filzbach User Guide](http://research.microsoft.com/en-us/um/cambridge/groups/science/tools/filzbach/filzbach%20user%20gude%20v.1.1.pdf).
     /// The `dsply` argument is not used here.
     member x.Add(name, lb:float, ub:float, ``val``:float, ``type``, ``fixed``, dsply:int, ?number) =
+        ignore dsply // prevent 'not used' warning
         let size = defaultArg number 1
         if ``type`` = 0 then
             x.Add(name, Array.create size ``val``, lb, ub, (if ``fixed`` = 0 then 0 else System.Int32.MaxValue), false, Uniform(lb, ub))
@@ -244,15 +245,6 @@ and Sampler private (// utilities
                       runacc:int[] // number of accepted alterations of individual parameters
     ) =
     static let log_prior pall values = Array.fold2 (fun sum d v -> sum + d.log_priordf v) 0. pall values
-    static let make_pall (pp:Parameters) =
-//        let pall = Array.zeroCreate pp.CountValues
-//        for kv in pp.definitions do
-//            let pdef = kv.Value
-//            let index = pdef.index
-//            for offset in 0..pdef.size-1 do
-//                pall.[index+offset] <- pdef
-//        pall
-        Array.init pp.CountValues (fun i -> pp.GetName i |> pp.GetDefinition)
 
     member private x.Equals (that_metr_k, that_rng:MT19937, that_pp, that_deltas, that_ltotold, that_ptotold, that_accept, that_runalt, that_runacc) =
         that_metr_k = metr_k && that_rng.get_seed() = rng.get_seed() && that_pp = pp && that_deltas = deltas && that_ltotold = ltotold 
@@ -457,28 +449,33 @@ module Serialization =
 
     let deserializeParameters (is:InfoSet) =
         let invalidInfoSet() = invalidArg "is" "invalid InfoSet"
-        try
-            let (Map dict) = is
+        match is with 
+        | Map dict ->
             if dict.ContainsKey "v" && dict.ContainsKey "p" then
-                let (DoubleArray values) = dict.["v"]
-                let values' = Array.ofSeq values
-                let (Seq pd) = dict.["p"]
-                pd |> Seq.fold (fun (p:Parameters, index) (Seq args) ->
-                    let [
-                        String name
-                        Int size
-                        Double lower
-                        Double upper
-                        Int delay
-                        Bool isLog
-                        is_prior
-                        ] = List.ofSeq args
-                    p.Add(name, Array.sub values' index size, lower, upper, delay, isLog, deserializeDistribution is_prior), index+size
-                    ) (Parameters.Empty, 0)
-                    |> fst
+                match dict.["v"], dict.["p"] with
+                | (DoubleArray values), (Seq pd) ->
+                    let values' = Array.ofSeq values
+                    pd |> Seq.fold (fun (p:Parameters, index) is_args ->
+                        match is_args with
+                        | Seq args ->
+                            match List.ofSeq args with 
+                            | [
+                              String name
+                              Int size
+                              Double lower
+                              Double upper
+                              Int delay
+                              Bool isLog
+                              is_prior
+                              ] ->
+                                p.Add(name, Array.sub values' index size, lower, upper, delay, isLog, deserializeDistribution is_prior), index+size
+                            | _ -> invalidInfoSet()
+                        | _ -> invalidInfoSet()
+                        ) (Parameters.Empty, 0)
+                        |> fst
+                | _ -> invalidInfoSet()
             else invalidInfoSet()
-        with :? MatchFailureException | :? System.IndexOutOfRangeException -> 
-            invalidInfoSet()
+        | _ -> invalidInfoSet()
 
     type ParametersSerializer() =
         interface ISerializer<Parameters> with
