@@ -126,7 +126,9 @@ let ParametersTests() =
 let SamplerTests() =
     let assertfail() : 'a = raise (AssertionException(null))
     let mt = Angara.Statistics.MT19937()
-    let logl (_:Parameters) = log(1.-mt.uniform_float64())
+    let logl (p:Parameters) =
+        let s = p.AllValues |> Seq.sum
+        - log (1. + exp(-s))
     let sample = Sampler.Create(Parameters.Empty, mt, logl)
     test <@ Seq.isEmpty sample.Parameters.AllValues @>
     test <@ Seq.isEmpty (sample.Probe(true, logl).Parameters.AllValues) @>

@@ -80,3 +80,24 @@ let ParametersSerialization() =
     raises<System.ArgumentException> <@ deserializeParameters (InfoSet.Seq[]) @>
     raises<System.ArgumentException> <@ deserializeParameters (InfoSet.String "") @>
     raises<System.ArgumentException> <@ deserializeParameters (InfoSet.Double 1.) @>
+
+[<Test>]
+let SamplerSerialization() =
+    let lib = SerializerLibrary.CreateDefault()
+    Register(lib)
+    let logl (p:Parameters) =
+        let s = p.AllValues |> Seq.sum
+        - log (1. + exp(-s))
+    let s = 
+        Sampler.Create(Parameters.Empty.Add("b", Uniform(1.,2.)).Add("a",Normal(3.,4.),2).Add("a b",Uniform(5.,6.)), MT19937(), logl)
+        |> Seq.unfold (fun s -> if s.Iteration>100 then None else let s' = s.Probe(true,logl) in Some (s',s')) 
+        |> Seq.last
+    let json = Json.FromObject(lib, s).ToString()
+    let s2 = Json.ToObject<Sampler>(Newtonsoft.Json.Linq.JObject.Parse json,lib)
+    test <@ (s.Parameters.AllValues |> Seq.toArray) = (s2.Parameters.AllValues |> Seq.toArray) @>
+
+    let s' = s |> Seq.unfold (fun s -> 
+        if s.Iteration>200 then None else let s' = s.Probe(true,logl) in Some (s',s')) |> Seq.last
+    let s2' = s2 |> Seq.unfold (fun s -> 
+        if s.Iteration>200 then None else let s' = s.Probe(true,logl) in Some (s',s')) |> Seq.last
+    test <@ (s'.Parameters.AllValues |> Seq.toArray) = (s2'.Parameters.AllValues |> Seq.toArray) @>

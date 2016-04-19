@@ -379,11 +379,13 @@ and Sampler private (// utilities
         else
             Sampler(pall, metr_k+1, rng, pp, deltas, ltotold, ptotold, accept, runalt, runacc)
 
+    member x.Iteration = metr_k
     member x.Parameters = pp
     member x.LogLikelihood = ltotold
     member x.LogPrior = ptotold
     member x.SamplingWidths = Array.copy deltas
     member x.IsAccepted = accept
+    member internal x.State = metr_k, rng.get_seed(), pp, Array.copy deltas, ltotold, ptotold, accept, Array.copy runalt, Array.copy runacc
 
     static member runmcmc(pp, logl, burnCount, sampleCount, ?thinning, ?rng) =
         let thinning = defaultArg thinning 100
@@ -429,6 +431,8 @@ module Serialization =
     open Angara.Serialization
     open Angara.Statistics.Serialization
 
+    let invalidInfoSet() = invalidArg "is" "invalid InfoSet"
+
     let serializeParameters (p:Parameters) = 
         let pd = 
             p.definitions |> Seq.toArray 
@@ -448,7 +452,6 @@ module Serialization =
             .AddInfoSet("p", Seq(pd))
 
     let deserializeParameters (is:InfoSet) =
-        let invalidInfoSet() = invalidArg "is" "invalid InfoSet"
         match is with 
         | Map dict ->
             if dict.ContainsKey "v" && dict.ContainsKey "p" then
@@ -479,6 +482,32 @@ module Serialization =
 
     type ParametersSerializer() =
         interface ISerializer<Parameters> with
-            member x.TypeId = "FilzP"
+            member x.TypeId = "FilzbachP"
             member x.Serialize _ p = serializeParameters p
             member x.Deserialize _ is = deserializeParameters is
+
+    let serializeSampler (s:Sampler) =
+        let metr_k, seed, pp, deltas, ltotold, ptotold, accept, runalt, runacc = s.State
+        Seq [Int metr_k; UIntArray seed; serializeParameters pp; DoubleArray deltas; Double ltotold; Double ptotold; Bool accept; IntArray runalt; IntArray runacc]
+
+    let deserializeSampler is =
+        match is with
+        | Seq is_fields ->
+            match is_fields |> List.ofSeq with
+            | [Int metr_k; UIntArray seed; is_pp; DoubleArray deltas; Double ltotold; Double ptotold; Bool accept; IntArray runalt; IntArray runacc] ->
+                let pp = deserializeParameters is_pp
+                Sampler.Restore(metr_k, MT19937(Array.ofSeq seed), pp, Array.ofSeq deltas, ltotold, ptotold, accept, Array.ofSeq runalt, Array.ofSeq runacc)
+            | _ -> invalidInfoSet()
+        | _ -> invalidInfoSet()
+
+    type SamplerSerializer() =
+        interface ISerializer<Sampler> with
+            member x.TypeId = "FilzbachS"
+            member x.Serialize _ s = serializeSampler s
+            member x.Deserialize _ is = deserializeSampler is
+
+    let Register (lib:ISerializerLibrary) =
+        lib.Register(Angara.Statistics.Serialization.MersenneTwisterSerializer())
+        lib.Register(Angara.Statistics.Serialization.DistributionSerializer())
+        lib.Register(ParametersSerializer())
+        lib.Register(SamplerSerializer())
