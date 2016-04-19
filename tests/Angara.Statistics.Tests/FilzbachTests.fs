@@ -164,4 +164,20 @@ let SamplerTests() =
     let s5'' = s5 |> Seq.unfold (fun s -> if s.IsAccepted then None else let s' = s.Probe(true,logl) in Some (s',s')) |> Seq.last
     let v51'', v52'', v5'' = match s5''.Parameters.AllValues |> Seq.toList with [v;v';v''] -> v,v',v'' | _ -> assertfail()
     test <@ v51'' = 3. && v52'' = 3.1 && s5''.IsAccepted && (v5 <> v5'') @>
-    
+
+[<Test>]
+let ContinueationTest() =
+    let logl (p:Parameters) =
+        let s = p.AllValues |> Seq.sum
+        - log (1. + exp(-s))
+    let pp =
+        Parameters.Empty
+            .Add("b", Angara.Statistics.Uniform(1.,2.))
+            .Add("a",Angara.Statistics.Normal(3.,4.),2)
+            .Add("a b",Angara.Statistics.Uniform(5.,6.))
+    let r = Sampler.runmcmc(pp, logl, 100, 100, 1)
+    test <@ 100 = (r.samples |> Seq.length) @>
+    let r1' = Sampler.runmcmc(pp, logl, 50, 100, 1)
+    test <@ 100 = (r1'.samples |> Seq.length) && r.acceptanceRate<>r1'.acceptanceRate && r.samples<>r1'.samples@>
+    let r1 = Sampler.continuemcmc(r1'.burnedIn, logl, 50, 100, 1)
+    test <@ r.acceptanceRate=r1.acceptanceRate && r.samples=r1.samples@>

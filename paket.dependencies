@@ -4,7 +4,7 @@ nuget Angara.Serialization
 group Test
   source https://nuget.org/api/v2
   
-nuget angara.serialization.json
+  nuget Angara.Serialization.Json
   nuget NUnit ~> 2
   nuget NUnit.Runners ~> 2
   nuget FsUnit

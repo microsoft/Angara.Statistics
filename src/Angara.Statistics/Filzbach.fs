@@ -228,7 +228,7 @@ type Parameters private (pdefs: Map<string,ParameterDefinition>, pvalues: float[
 
 type Sample = {values:float[]; logLikelihood:float; logPrior:float}
 
-type SamplerResult = {sampler:Sampler; samples:Sample seq; acceptanceRate: float}
+type SamplerResult = {burnedIn:Sampler; final:Sampler; samples:Sample seq; acceptanceRate: float}
 
 /// An immutable state of Filzbach MCMC sampler.
 and Sampler private (// utilities
@@ -246,14 +246,15 @@ and Sampler private (// utilities
     ) =
     static let log_prior pall values = Array.fold2 (fun sum d v -> sum + d.log_priordf v) 0. pall values
 
-    member private x.Equals (that_metr_k, that_rng:MT19937, that_pp, that_deltas, that_ltotold, that_ptotold, that_accept, that_runalt, that_runacc) =
-        that_metr_k = metr_k && that_rng.get_seed() = rng.get_seed() && that_pp = pp && that_deltas = deltas && that_ltotold = ltotold 
-        && that_ptotold = ptotold && that_accept = accept && that_runalt = runalt && that_runacc = runacc
+    new(copy:Sampler) =
+        let metr_k, (seed:uint32[]), (pp:Parameters), deltas, ltotold, ptotold, accept, runalt, runacc = copy.State
+        let pall = Array.init pp.CountValues (fun i -> pp.GetName i |> pp.GetDefinition)
+        Sampler(pall, metr_k, MT19937 seed, pp, deltas, ltotold, ptotold, accept, runalt, runacc)
 
-    static member Restore(metr_k, rng, (pp:Parameters), deltas, ltotold, ptotold, accept, runalt, runacc) =
+    static member internal Restore(metr_k, rng, (pp:Parameters), deltas, ltotold, ptotold, accept, runalt, runacc) =
         let pall = Array.init pp.CountValues (fun i -> pp.GetName i |> pp.GetDefinition)
         Sampler(pall, metr_k, rng, pp, deltas, ltotold, ptotold, accept, runalt, runacc)
-        
+            
     static member Create(pp: Parameters, rng: MT19937, logl: Parameters -> float) =
         // init_chains
         let paramcount = pp.CountValues
@@ -276,6 +277,7 @@ and Sampler private (// utilities
         // initialize iteration number
         Sampler.Restore(1, rng, pp.SetValues values, deltas, ltotold, ptotold, false, runalt, runacc)
 
+    /// Advance one iteration of either burn-in or sampling
     member x.Probe(isBurnIn:bool, logl: Parameters -> float) =
         let paramcount = pall.Length
         let rng = MT19937(rng)
@@ -387,14 +389,26 @@ and Sampler private (// utilities
     member x.IsAccepted = accept
     member internal x.State = metr_k, rng.get_seed(), pp, Array.copy deltas, ltotold, ptotold, accept, Array.copy runalt, Array.copy runacc
 
+    /// Complete sampling procedure that does `burnCount` burn-in iterations
+    /// followed by collecting `sampleCount` samples from posterior.
+    /// Total number of iterations is `burnCount + thinning * sampleCount`.
     static member runmcmc(pp, logl, burnCount, sampleCount, ?thinning, ?rng) =
         let thinning = defaultArg thinning 100
         if thinning<1 then invalidArg "thinning" "must be > 0."
         let rng = defaultArg rng (MT19937())
+        Sampler.continuemcmc(Sampler.Create(pp, rng, logl), logl, burnCount, sampleCount, thinning)
+
+    /// Continuation of sampling procedure after incomplete burn-in. It does `burnCount` additional burn-in iterations
+    /// followed by collecting `sampleCount` samples from posterior.
+    /// Total number of iterations is `burnCount + thinning * sampleCount`.
+    static member continuemcmc(sampler:Sampler, logl, burnCount, sampleCount, ?thinning) =
+        let thinning = defaultArg thinning 100
+        if thinning<1 then invalidArg "thinning" "must be > 0."
         // initialize sampler
-        let mutable sampler = Sampler.Create(pp, rng, logl)
+        let mutable sampler = sampler
         // do burn-in iterations
         for _ in 1..burnCount do sampler <- sampler.Probe(true, logl)
+        let burnedIn = Sampler(sampler) // saved copy
         // collect sampleCount samples
         let mutable countAccepted = 0
         let samples = 
@@ -405,9 +419,10 @@ and Sampler private (// utilities
                     if sampler.IsAccepted then countAccepted <- countAccepted + 1
                 {values=Array.copy sampler.Parameters.values; logLikelihood = sampler.LogLikelihood; logPrior = sampler.LogPrior}
             ]
-        {sampler = sampler; samples = samples; acceptanceRate = ((float countAccepted) / (float sampleCount * float thinning))}
-
-    static member print {sampler=sampler; samples=samples; acceptanceRate = acceptanceRate} =
+        {burnedIn=burnedIn; final = sampler; samples = samples; acceptanceRate = ((float countAccepted) / (float sampleCount * float thinning))}
+    
+    /// Prints summary of results from `runmcmc` or `continuemcmc`.
+    static member print {final=sampler; samples=samples; acceptanceRate = acceptanceRate} =
         printfn "Samples max log likelihood*prior = %g, acceptance rate at sampling = %5.3f" 
                     (samples |> Seq.map (fun {logLikelihood=logl; logPrior=logp} -> logl+logp) |> Seq.max)
                     acceptanceRate

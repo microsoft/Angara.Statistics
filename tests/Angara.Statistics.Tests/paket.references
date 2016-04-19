@@ -4,4 +4,4 @@ NUnit
 NUnit.Runners
 FsUnit
 Unquote
-angara.serialization.json
+Angara.Serialization.Json
