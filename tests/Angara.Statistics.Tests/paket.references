@@ -1,5 +1,7 @@
+Angara.Serialization
 group Test
 NUnit
 NUnit.Runners
 FsUnit
 Unquote
+Angara.Serialization.Json

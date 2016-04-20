@@ -476,8 +476,8 @@ type MT19937 private (
         else
             let state = init_by_array(seed)
             MT19937(state, N)
-    member private x.getMt = mt
-    member private x.getIdx = idx
+    member private x.getMt = Array.copy mt
+    member private x.getIdx = mti
     new(copy:MT19937) =
         MT19937(copy.getMt, copy.getIdx)
 
@@ -718,8 +718,8 @@ let idct (rxs:float[]) =
     let interleave z =
         let hz = z >>> 1
         match z with
-            | Even(z) -> vals.[hz]
-            | Odd(z) -> vals.[len - hz - 1]
+            | Even _ -> vals.[hz]
+            | Odd _ -> vals.[len - hz - 1]
     [| for i in 0..len-1 do yield interleave(i) |]
 
 // http://hackage.haskell.org/package/statistics-0.10.5.0/docs/src/Statistics-Function.html#nextHighestPowerOfTwo
@@ -906,3 +906,86 @@ let kde n0 (xs:float seq) =
                        min <- xsi)
                 if min >= max then 1.0 else max - min
         kde2 n0 (min - range/10.0) (max + range/10.0) xs
+
+module Serialization =
+    open Angara.Serialization
+
+    let rec serializeDistribution (d:Distribution) =
+        let islist =
+            match d with
+            | Uniform(lower,upper) -> [String "U"; Double lower; Double upper]
+            | LogUniform(lower,upper) -> [String "LU"; Double lower; Double upper]
+            | Normal(mean, stdev) -> [String "N"; Double mean; Double stdev]
+            | LogNormal(mean, stdev) -> [String "LN"; Double mean; Double stdev]
+            | Gamma(a, b) -> [String "G"; Double a; Double b]
+            | Binomial(n, p) -> [String "B"; Int n; Double p]
+            | NegativeBinomial(mean, r) -> [String "NB"; Double mean; Double r]
+            | Bernoulli(p) -> [String "C"; Double p]
+            | Exponential(mean) -> [String "E"; Double mean]
+            | Poisson(mean) -> [String "P"; Double mean]
+            | Mixture(components) ->
+                let cc = components |> List.map (fun (weight, c) ->
+                    Seq [Double weight; serializeDistribution c])
+                [String "M"; Seq(cc)]
+        Seq islist
+           
+    let rec deserializeDistribution (is:InfoSet) =
+        let invalidInfoSet() = invalidArg "is" "invalid InfoSet"
+        match is with
+        | Seq content ->
+            match content |> List.ofSeq with
+            | tag::args ->
+                match tag.ToStringValue() with
+                | "U" -> match args with [Double lower; Double upper] -> Uniform(lower, upper) | _ -> invalidInfoSet()
+                | "LU" -> match args with [Double lower; Double upper]-> LogUniform(lower, upper) | _ -> invalidInfoSet()
+                | "N" -> match args with [Double mean; Double stdev]-> Normal(mean, stdev) | _ -> invalidInfoSet()
+                | "LN" -> match args with [Double mean; Double stdev]-> LogNormal(mean, stdev) | _ -> invalidInfoSet()
+                | "G" -> match args with [Double a; Double b]-> Gamma(a, b) | _ -> invalidInfoSet()
+                | "NB" -> match args with [Double mean; Double r]-> NegativeBinomial(mean, r) | _ -> invalidInfoSet()
+                | "B" -> match args with [Int n; Double p]-> Binomial(n, p) | _ -> invalidInfoSet()
+                | "C" -> match args with [Double p]-> Bernoulli(p) | _ -> invalidInfoSet()
+                | "E" -> match args with [Double p]-> Exponential(p) | _ -> invalidInfoSet()
+                | "P" -> match args with [Double p]-> Poisson(p) | _ -> invalidInfoSet()
+                | "M" ->
+                    match args with 
+                    | [Seq is_components] ->
+                        let components = 
+                            is_components 
+                            |> Seq.map (function 
+                                | (Seq is_c) -> 
+                                    match List.ofSeq is_c with  [Double weight; is_d] -> weight, deserializeDistribution is_d | _ -> invalidInfoSet()
+                                | _ -> invalidInfoSet())
+                            |> List.ofSeq
+                        Mixture components
+                    | _ -> invalidInfoSet()
+                | _ -> invalidInfoSet()
+            | _ -> invalidInfoSet()
+        | _ -> invalidInfoSet()
+
+    let serializeMersenneTwister (mt:MT19937) =
+        let seed = mt.get_seed()
+        use buffer = new System.IO.MemoryStream (seed.Length*4)
+        use writer = new System.IO.BinaryWriter(buffer)
+        seed |> Array.iter writer.Write
+        ByteArray(buffer.GetBuffer())
+
+    let deserializeMersenneTwister is =
+        match is with
+        | ByteArray byteseq ->
+            let buffer = Array.ofSeq byteseq
+            use reader = new System.IO.BinaryReader(new System.IO.MemoryStream (buffer))
+            let seed = Array.init (buffer.Length/4) (fun _ -> reader.ReadUInt32())
+            MT19937 seed
+        | _ -> invalidArg "is" "Invalid InfoSet"
+
+    type DistributionSerializer() =
+        interface ISerializer<Distribution> with
+            member x.TypeId = "ProbDist"
+            member x.Serialize _ d = serializeDistribution d
+            member x.Deserialize _ is = deserializeDistribution is
+
+    type MersenneTwisterSerializer() =
+        interface ISerializer<MT19937> with
+            member x.TypeId = "MeresenneTwister"
+            member x.Serialize _ mt = serializeMersenneTwister mt
+            member x.Deserialize _ is = deserializeMersenneTwister is

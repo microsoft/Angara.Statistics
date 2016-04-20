@@ -1,10 +1,11 @@
 ﻿module FilzbachTests
 open NUnit.Framework
 open FsUnit
+open Swensen.Unquote
 
 open Angara.Filzbach
 
-let noPrior _ = 0.
+let uniform = Angara.Statistics.Uniform(0.,1.)
 
 [<Test>]
 let ParametersTests() =
@@ -35,7 +36,7 @@ let ParametersTests() =
     p1.GetValue "s" |> should equal 0.5
     p1.GetValue("s", 0) |> should equal 0.5
     (fun () -> p1.GetValue("s", 1) |> ignore) |> should throw typeof<System.IndexOutOfRangeException>
-    p1.GetDefinition "s" |> should equal {index=0; size=1; lower=0.; upper=1.; delay=0; prior=noPrior; isLog=false}
+    p1.GetDefinition "s" |> should equal {index=0; size=1; lower=0.; upper=1.; delay=0; prior=uniform; isLog=false; log_priordf=id}
     (p1:>IParameters).Count |> should equal 1
     (p1:>IParameters).ContainsKey "s" |> should be True
     (p1:>IParameters).ContainsKey "a" |> should be False
@@ -56,7 +57,7 @@ let ParametersTests() =
     (fun () -> p2.GetValue "v" |> ignore) |> should throw typeof<System.InvalidOperationException> // vector syntax
     p2.GetValue("v", 0) |> should equal 0.6
     p2.GetValue("v", 1) |> should equal 0.7
-    p2.GetDefinition "v" |> should equal {index=0; size=2; lower=0.; upper=1.; delay=0; prior=noPrior; isLog=false}
+    p2.GetDefinition "v" |> should equal {index=0; size=2; lower=0.; upper=1.; delay=0; prior=uniform; isLog=false; log_priordf=id}
     (p2:>IParameters).Count |> should equal 1
     (p2:>IParameters).ContainsKey "v" |> should be True
     (p2:>IParameters).ContainsKey "a" |> should be False
@@ -79,8 +80,8 @@ let ParametersTests() =
     p3.GetValue("v", 1) |> should equal 0.7
     p3.GetValue "s" |> should equal 0.5
     p3.GetValue("s", 0) |> should equal 0.5
-    p3.GetDefinition "s" |> should equal {index=2; size=1; lower=0.; upper=1.; delay=0; prior=noPrior; isLog=false}
-    p3.GetDefinition "v" |> should equal {index=0; size=2; lower=0.; upper=1.; delay=0; prior=noPrior; isLog=false}
+    p3.GetDefinition "s" |> should equal {index=2; size=1; lower=0.; upper=1.; delay=0; prior=uniform; isLog=false; log_priordf=id}
+    p3.GetDefinition "v" |> should equal {index=0; size=2; lower=0.; upper=1.; delay=0; prior=uniform; isLog=false; log_priordf=id}
     (p3:>IParameters).Count |> should equal 2
     (p3:>IParameters).ContainsKey "s" |> should be True
     (p3:>IParameters).ContainsKey "v" |> should be True
@@ -106,8 +107,8 @@ let ParametersTests() =
     p4.GetValue("v", 1) |> should equal 0.7
     p4.GetValue "s" |> should equal 0.5
     p4.GetValue("s", 0) |> should equal 0.5
-    p4.GetDefinition "s" |> should equal {index=0; size=1; lower=0.; upper=1.; delay=0; prior=noPrior; isLog=false}
-    p4.GetDefinition "v" |> should equal {index=1; size=2; lower=0.; upper=1.; delay=0; prior=noPrior; isLog=false}
+    p4.GetDefinition "s" |> should equal {index=0; size=1; lower=0.; upper=1.; delay=0; prior=uniform; isLog=false; log_priordf=id}
+    p4.GetDefinition "v" |> should equal {index=1; size=2; lower=0.; upper=1.; delay=0; prior=uniform; isLog=false; log_priordf=id}
     (p4:>IParameters).Count |> should equal 2
     (p4:>IParameters).ContainsKey "s" |> should be True
     (p4:>IParameters).ContainsKey "v" |> should be True
@@ -121,4 +122,62 @@ let ParametersTests() =
     (p4:>IParameters).Keys |> Seq.toList |> should equal ["s";"v"]
     (p4:>IParameters).Values |> Seq.toList |> should equal [[|0.5|]; [|0.6;0.7|]]
 
+[<Test>]
+let SamplerTests() =
+    let assertfail() : 'a = raise (AssertionException(null))
+    let mt = Angara.Statistics.MT19937()
+    let logl (p:Parameters) =
+        let s = p.AllValues |> Seq.sum
+        - log (1. + exp(-s))
+    let sample = Sampler.Create(Parameters.Empty, mt, logl)
+    test <@ Seq.isEmpty sample.Parameters.AllValues @>
+    test <@ Seq.isEmpty (sample.Probe(true, logl).Parameters.AllValues) @>
+    let s2 = Sampler.Create(Parameters.Empty.Add("a",1.), mt, logl)
+    test <@ s2.Parameters.AllValues |> Seq.toList = [1.] @>
+    test <@ s2.Probe(true, logl).Parameters.AllValues |> Seq.toList = [1.] @>
+    let s3 = Sampler.Create(Parameters.Empty.Add("a",Angara.Statistics.Uniform(1.,2.)), mt, logl)
+    let v3 = match s3.Parameters.AllValues |> Seq.toList with [v] -> v | _ -> assertfail()
+    test <@  v3 > 1. && v3 < 2. @>
+    let s3' = s3 |> Seq.unfold (fun s -> if s.IsAccepted then None else let s' = s.Probe(false,logl) in Some (s',s')) |> Seq.last
+    let v3' = match s3'.Parameters.AllValues |> Seq.toList with [v] -> v | _ -> assertfail()
+    test <@ s3'.IsAccepted && (v3 <> v3') @>
+    let s3'' = s3 |> Seq.unfold (fun s -> if s.IsAccepted then None else let s' = s.Probe(true,logl) in Some (s',s')) |> Seq.last
+    let v3'' = match s3''.Parameters.AllValues |> Seq.toList with [v] -> v | _ -> assertfail()
+    test <@ s3''.IsAccepted && (v3 <> v3'') @>
 
+    let s4 = Sampler.Create(Parameters.Empty.Add("a",Angara.Statistics.Uniform(1.,2.)).Add("b",3.), mt, logl)
+    let v4, v41 = match s4.Parameters.AllValues |> Seq.toList with [v;v'] -> v,v' | _ -> assertfail()
+    test <@  v41 = 3. && v4 > 1. && v4 < 2. @>
+    let s4' = s4 |> Seq.unfold (fun s -> if s.IsAccepted then None else let s' = s.Probe(false,logl) in Some (s',s')) |> Seq.last
+    let v4', v41' = match s4'.Parameters.AllValues |> Seq.toList with [v;v'] -> v,v' | _ -> assertfail()
+    test <@ v41' = 3. && s4'.IsAccepted && (v4 <> v4') @>
+    let s4'' = s4 |> Seq.unfold (fun s -> if s.IsAccepted then None else let s' = s.Probe(true,logl) in Some (s',s')) |> Seq.last
+    let v4'', v41'' = match s4''.Parameters.AllValues |> Seq.toList with [v;v'] -> v,v' | _ -> assertfail()
+    test <@ v41'' = 3. && s4''.IsAccepted && (v4 <> v4'') @>
+
+    let s5 = Sampler.Create(Parameters.Empty.Add("b",[|3.;3.1|]).Add("a",Angara.Statistics.Uniform(1.,2.)), mt, logl)
+    let v51, v52, v5 = match s5.Parameters.AllValues |> Seq.toList with [v;v';v''] -> v,v',v'' | _ -> assertfail()
+    test <@  v51 = 3. && v52 = 3.1 && v5 > 1. && v5 < 2. @>
+    let s5' = s5 |> Seq.unfold (fun s -> if s.IsAccepted then None else let s' = s.Probe(false,logl) in Some (s',s')) |> Seq.last
+    let v51', v52', v5' = match s5'.Parameters.AllValues |> Seq.toList with [v;v';v''] -> v,v',v'' | _ -> assertfail()
+    test <@ v51' = 3. && v52' = 3.1 && s5'.IsAccepted && (v5 <> v5') @>
+    let s5'' = s5 |> Seq.unfold (fun s -> if s.IsAccepted then None else let s' = s.Probe(true,logl) in Some (s',s')) |> Seq.last
+    let v51'', v52'', v5'' = match s5''.Parameters.AllValues |> Seq.toList with [v;v';v''] -> v,v',v'' | _ -> assertfail()
+    test <@ v51'' = 3. && v52'' = 3.1 && s5''.IsAccepted && (v5 <> v5'') @>
+
+[<Test>]
+let ContinueationTest() =
+    let logl (p:Parameters) =
+        let s = p.AllValues |> Seq.sum
+        - log (1. + exp(-s))
+    let pp =
+        Parameters.Empty
+            .Add("b", Angara.Statistics.Uniform(1.,2.))
+            .Add("a",Angara.Statistics.Normal(3.,4.),2)
+            .Add("a b",Angara.Statistics.Uniform(5.,6.))
+    let r = Sampler.runmcmc(pp, logl, 100, 100, 1)
+    test <@ 100 = (r.samples |> Seq.length) @>
+    let r1' = Sampler.runmcmc(pp, logl, 50, 100, 1)
+    test <@ 100 = (r1'.samples |> Seq.length) && r.acceptanceRate<>r1'.acceptanceRate && r.samples<>r1'.samples@>
+    let r1 = Sampler.continuemcmc(r1'.burnedIn, logl, 50, 100, 1)
+    test <@ r.acceptanceRate=r1.acceptanceRate && r.samples=r1.samples@>
