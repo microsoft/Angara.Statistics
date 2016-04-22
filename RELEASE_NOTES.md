@@ -1,6 +1,11 @@
-### 0.1.4
+### 0.1.5
+
+* Fixed a bug in Gamma random number generator.
+
+### 0.1.4 - 2016-04-20
 
 * Sampler state can be serialized to continue unfinished computation.
+* Fixed Mersenne twister copy constructor
 
 ### 0.1.3 - 2016-04-12
 

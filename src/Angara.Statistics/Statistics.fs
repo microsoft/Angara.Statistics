@@ -553,10 +553,11 @@ let rec draw (gen:MT19937) d = // random number generator
         elif a=1.0 then
             rng_exp(1.0)/b
         elif a<20.0 && floor a = a then
-            // _Alpha is small integer, compute directly
-            let rec iter c y =
-                if c=0 then y else iter (c-1) y*rand_positive()
-            -log(iter (int a) (rand_positive()))/b
+            // _Alpha is small integer, compute directly:
+            // -∑_(k=1)^n▒ln⁡〖U_k 〗 ~Γ(n,1)
+            // Where U  is uniformly distributed on (0, 1] (https://en.wikipedia.org/wiki/Gamma_distribution)
+            let product = seq { for _ in 1..int a -> rand_positive()} |> Seq.reduce (*)
+            -log(product)/b
         else
             // no shortcuts
             let rec iter () =
