@@ -1,6 +1,7 @@
 ### 0.1.5
 
 * Fixed a bug in Gamma random number generator.
+* Changed parameterization of Exponential distribution.
 
 ### 0.1.4 - 2016-04-20
 

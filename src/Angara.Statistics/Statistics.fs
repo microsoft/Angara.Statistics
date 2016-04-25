@@ -5,18 +5,27 @@
 //
 
 type Distribution = 
+  /// A uniform distribution over [`lower_bound`, `upper_bound`) range.
   | Uniform of float*float // lower bound, upper bound (> lower bound) -> continuous [lower bound to upper bound)
   /// A uniform distribution in log space.
   | LogUniform of float*float // lower bound (> 0), upper bound (> lower bound) -> continuous [lower bound to upper bound)
+  /// Normal distribution of `mean`, `standard_deviation`.
   | Normal of float*float // mean, standard deviation (> 0) -> continuous (-infinity to infinity)
+  /// Normal distribution in log space of `mean`, `standard_deviation_of_log`.
   | LogNormal of float*float // log mean, standard deviation of logarithm (> 0) -> continuous (0.0 to infinity)
+  /// Distribution of a yes/no experiment (1 or 0) which yields success with probability `p`.
   | Bernoulli of float // fraction of success [1e-16 to 1.0-1e-16] -> success/failure outcome, 1 or 0
-  /// A number of successes in a sequence of n independent yes/no experiments, each of which yields success with probability p.
+  /// A number of successes in a sequence of `n` independent yes/no experiments, each of which yields success with probability `p`.
   | Binomial of int*float // number of trials, probability of success -> number of successes, [0 to max_int]
-  | NegativeBinomial of float*float // mean (0 to inf), number of failures or 'shape' for fractional values (0 to inf) -> number of successes, [0 to max_int]
-  | Poisson of float // mean a.k.a. lambda [0, maxint] -> number of events [0 to maxint]
+  /// A number of successes before a given number of failures `r` in a sequence of yes/no experiments, each of which yields success with probability `p = mean/(mean+r)`.
+  | NegativeBinomial of mean:float * r:float // mean (0 to inf), number of failures or 'shape' for fractional values (0 to inf) -> number of successes, [0 to max_int]
+  /// A number of events occuring  in a fixed interval of time if these events occur with a known average rate = `mean`. 
+  | Poisson of mean:float // mean a.k.a. lambda [0, maxint] -> number of events [0 to maxint]
+  /// A family of distributions of positive values. The parameters alpha and beta are sometimes called shape and rate.
   | Gamma of float*float // alpha (>0), beta (>0) -> continuous (0 to infinity)
-  | Exponential of float // rate lambda (>0) -> continuaous [0 to infinity)
+  /// Time between events in a process in which events occur continuously and independently at a constant average `rate = 1/mean`. 
+  | Exponential of mean:float // rate lambda (>0) -> continuous [0 to infinity)
+  /// A weighted mixture of distributions.
   | Mixture of (float*Distribution) list
 
 /// The smallest positive normalized `float` value
@@ -181,9 +190,9 @@ let rec log_pdf d v =
             | LogUniform(lb,ub) ->
                 if (v<lb || v>ub || lb>=ub) then log_improbable
                 else -log(log ub - log lb) - log v
-            | Exponential(lambda) -> 
-                if lambda<=0.0 then log_improbable else
-                    log(lambda) - lambda*v
+            | Exponential(mean) -> 
+                if mean<=0.0 || mean = infinity then log_improbable else
+                    -log(mean) - v/mean
             | Gamma(a,b) ->
                 a*log(b) - log_gamma(a) + (a-1.0)*log(v) - b*v
             | Bernoulli(fraction) -> 
@@ -338,7 +347,7 @@ type MT19937 private (
         float(genrand_int32())*(1.0/4294967296.0) 
         // divided by 2^32
 
-    // tables for ziggurat algorithm
+    // tables for ziggurat algorithm http://www.boost.org/doc/libs/1_60_0/boost/random/normal_distribution.hpp
     static let table_x = [|
         3.7130862467403632609; 3.4426198558966521214; 3.2230849845786185446; 3.0832288582142137009;
         2.9786962526450169606; 2.8943440070186706210; 2.8231253505459664379; 2.7611693723841538514;
@@ -532,7 +541,7 @@ let rec draw (gen:MT19937) d = // random number generator
                 let rec step p k = if p<ell then k-1 else step (p*gen.uniform_float64()) (k+1)
                 float(step 1.0 0)
     let rec rand_positive () = let u = gen.uniform_float64() in if u>0.0 then u else rand_positive()
-    let rng_exp lambda = -log(rand_positive())/lambda
+    let rng_exp mean = -log(rand_positive()) * mean
     let rng_gamma a b =
         let p = e/(a+e)
         let s = sqrt(2.0*a-1.0)
@@ -571,7 +580,7 @@ let rec draw (gen:MT19937) d = // random number generator
     | Normal(mean,stdev) -> rng_norm(mean,stdev)
     | LogNormal(mean,stdev) -> exp(rng_norm(log mean,stdev))
     | Gamma(a,b) -> rng_gamma a b
-    | Exponential(lambda) -> rng_exp lambda
+    | Exponential(mean) -> rng_exp mean
     | Uniform(lower, upper) -> rng_unif(lower, upper)
     | LogUniform(lower, upper) -> exp(rng_unif(log lower, log upper))
     | Bernoulli(fraction) -> if gen.uniform_float64()<fraction then 1.0 else 0.0
