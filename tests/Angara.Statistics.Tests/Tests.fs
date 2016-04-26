@@ -206,3 +206,21 @@ let Mersenne_twister_copy_constructor() =
     mt.normal() |> ignore
     let mt_copy = MT19937(mt)
     test <@ mt.uniform_uint32() = mt_copy.uniform_uint32() @>
+
+[<Test>]
+let logistic_tests() =
+    test <@ logistic 0. = 0.5 @>
+    test <@ logistic -infinity = 0. @>
+    test <@ logistic infinity = 1. @>
+    test <@ within 1u (logistic -log_tolerance) 1. @>
+    test <@ logistic (log System.Double.Epsilon - 1.) = 0. @>
+    test <@ logit 0.5 = 0. @>
+    test <@ logit 0.4 < 0. @>
+    test <@ logit 0. = -infinity @>
+    test <@ logit 0.6 > 0. @>
+    test <@ logit 1. = infinity @>
+    test <@ within 1u -(logit 0.4) (logit 0.6) @>
+    test <@ within 1u ((logit >> logistic) 0.6) 0.6 @>
+    test <@ within 1u ((logit >> logistic) 0.4) 0.4 @>
+    test <@ within 2u ((logistic >> logit) 0.6) 0.6 @>
+    test <@ within 2u ((logistic >> logit) 0.4) 0.4 @>

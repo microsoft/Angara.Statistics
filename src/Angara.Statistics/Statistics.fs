@@ -59,6 +59,19 @@ let log2pi = 0.5*log(pi2)
 let private isNan = System.Double.IsNaN
 let private isInf = System.Double.IsInfinity
 
+/// Sigmoidal function that maps [-infinity,infinity] interval onto [0,1]
+let logistic x =
+    if x > 1.-log_tolerance then 1. else
+    let ex = exp x
+    ex / (1. + ex)
+
+/// Inverse logistic transform
+let logit p =
+    if p > 1. || p < 0. then nan
+    elif p = 1. then infinity
+    elif p = 0. then -infinity
+    else log(p/(1.-p)) 
+
 type summaryType = 
     {count:int; min:float; max:float; mean:float; variance:float}
     override me.ToString() = sprintf "%A" me
