@@ -2,6 +2,7 @@
 
 * Fixed a bug in Gamma random number generator.
 * Changed parameterization of Exponential distribution.
+* Added logit and logistic functions.
 
 ### 0.1.4 - 2016-04-20
 
