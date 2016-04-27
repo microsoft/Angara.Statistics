@@ -9,6 +9,8 @@ type Distribution =
   | Uniform of float*float // lower bound, upper bound (> lower bound) -> continuous [lower bound to upper bound)
   /// A uniform distribution in log space.
   | LogUniform of float*float // lower bound (> 0), upper bound (> lower bound) -> continuous [lower bound to upper bound)
+  /// A linearly changing distribution over a [`lower_bound`, `upper_bound`) range.
+  | Linear of lower_bound:float * upper_bound:float * density_at_lower_bound:float
   /// Normal distribution of `mean`, `standard_deviation`.
   | Normal of float*float // mean, standard deviation (> 0) -> continuous (-infinity to infinity)
   /// Normal distribution in log space of `mean`, `standard_deviation_of_log`.
@@ -203,6 +205,13 @@ let rec log_pdf d v =
             | LogUniform(lb,ub) ->
                 if (v<lb || v>ub || lb>=ub) then log_improbable
                 else -log(log ub - log lb) - log v
+            | Linear(x1,x2,density) ->
+                if v < min x1 x2 || v > max x1 x2 then log_improbable
+                elif x1=x2 then infinity else
+                let h = 2./abs(x2-x1)
+                let p1 = if density<0. then 0. elif density > h then h else density // p1 = 2*a*x1+b
+                let p2 = h-p1 // 0.5*(p1+p2)*abs(x2-x1) == 1; p2 = 2*a*x2+b
+                log(p1+(v-x1)*(p2-p1)/(x2-x1))
             | Exponential(mean) -> 
                 if mean<=0.0 || mean = infinity then log_improbable else
                     -log(mean) - v/mean
@@ -596,6 +605,18 @@ let rec draw (gen:MT19937) d = // random number generator
     | Exponential(mean) -> rng_exp mean
     | Uniform(lower, upper) -> rng_unif(lower, upper)
     | LogUniform(lower, upper) -> exp(rng_unif(log lower, log upper))
+    | Linear(x1,x2,density) ->
+        if x1=x2 then x1 else
+        let h = 2./(x2-x1)
+        let p, pmin, pmax = if h>0. then density, 0., h else -density, h, 0.
+        let p1 = if p<pmin then pmin elif p>pmax then pmax else p // p1 = 2*a*x1+b
+        let p2 = h-p1 // 0.5*(p1+p2)*(x2-x1) == 1; p2 = 2*a*x2+b
+        let a4 = (p2-p1)*h // 4*a
+        let b = p1 - 0.5*a4*x1
+        let y = gen.uniform_float64()
+        let absd = sqrt(p1*p1 + a4*y)
+        let d = if h>0. then absd else -absd
+        (d - b) * 2. / a4
     | Bernoulli(fraction) -> if gen.uniform_float64()<fraction then 1.0 else 0.0
     | Poisson(lambda) -> rng_poisson lambda
     | Binomial(n,p) ->
@@ -938,6 +959,7 @@ module Serialization =
             match d with
             | Uniform(lower,upper) -> [String "U"; Double lower; Double upper]
             | LogUniform(lower,upper) -> [String "LU"; Double lower; Double upper]
+            | Linear(lower,upper,density) -> [String "L"; Double lower; Double upper; Double density]
             | Normal(mean, stdev) -> [String "N"; Double mean; Double stdev]
             | LogNormal(mean, stdev) -> [String "LN"; Double mean; Double stdev]
             | Gamma(a, b) -> [String "G"; Double a; Double b]
@@ -961,6 +983,7 @@ module Serialization =
                 match tag.ToStringValue() with
                 | "U" -> match args with [Double lower; Double upper] -> Uniform(lower, upper) | _ -> invalidInfoSet()
                 | "LU" -> match args with [Double lower; Double upper]-> LogUniform(lower, upper) | _ -> invalidInfoSet()
+                | "L" -> match args with [Double lower; Double upper; Double density]-> Linear(lower, upper, density) | _ -> invalidInfoSet()
                 | "N" -> match args with [Double mean; Double stdev]-> Normal(mean, stdev) | _ -> invalidInfoSet()
                 | "LN" -> match args with [Double mean; Double stdev]-> LogNormal(mean, stdev) | _ -> invalidInfoSet()
                 | "G" -> match args with [Double a; Double b]-> Gamma(a, b) | _ -> invalidInfoSet()
