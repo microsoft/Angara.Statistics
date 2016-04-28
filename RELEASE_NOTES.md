@@ -3,6 +3,9 @@
 * Fixed a bug in Gamma random number generator.
 * Changed parameterization of Exponential distribution.
 * Added logit and logistic functions.
+* Added fromPiecewise helper method to build Mixture distribution
+* Renamed SamplerResult to SamplerCheckpoint and added burnInTrace to the structure
+* Changed signature of continuemcmc
 
 ### 0.1.4 - 2016-04-20
 

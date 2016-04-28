@@ -84,7 +84,7 @@ let ParametersSerialization() =
 [<Test>]
 let SamplerSerialization() =
     let lib = SerializerLibrary.CreateDefault()
-    Register(lib)
+    Register([lib])
     let logl (p:Parameters) =
         let s = p.AllValues |> Seq.sum
         - log (1. + exp(-s))

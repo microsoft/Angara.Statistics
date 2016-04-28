@@ -176,8 +176,11 @@ let ContinueationTest() =
             .Add("a",Angara.Statistics.Normal(3.,4.),2)
             .Add("a b",Angara.Statistics.Uniform(5.,6.))
     let r = Sampler.runmcmc(pp, logl, 100, 100, 1)
-    test <@ 100 = (r.samples |> Seq.length) @>
+    100 =! (r.samples |> Seq.length)
     let r1' = Sampler.runmcmc(pp, logl, 50, 100, 1)
-    test <@ 100 = (r1'.samples |> Seq.length) && r.acceptanceRate<>r1'.acceptanceRate && r.samples<>r1'.samples@>
-    let r1 = Sampler.continuemcmc(r1'.burnedIn, logl, 50, 100, 1)
-    test <@ r.acceptanceRate=r1.acceptanceRate && r.samples=r1.samples@>
+    100 =! (r1'.samples |> Seq.length)
+    r.acceptanceRate <>! r1'.acceptanceRate
+    r.samples <>! r1'.samples
+    let r1 = Sampler.continuemcmc(r1', logl, 100, 100)
+    r.acceptanceRate =! r1.acceptanceRate
+    r.samples =! r1.samples

@@ -228,7 +228,15 @@ type Parameters private (pdefs: Map<string,ParameterDefinition>, pvalues: float[
 
 type Sample = {values:float[]; logLikelihood:float; logPrior:float}
 
-type SamplerResult = {burnedIn:Sampler; final:Sampler; samples:Sample seq; acceptanceRate: float}
+type SamplerCheckpoint = 
+    {
+        burnedIn:Sampler
+        burnInTrace: (float*float) list
+        final:Sampler
+        samples:Sample list
+        thinning: int
+        acceptanceRate: float
+    }
 
 /// An immutable state of Filzbach MCMC sampler.
 and Sampler private (// utilities
@@ -396,30 +404,52 @@ and Sampler private (// utilities
         let thinning = defaultArg thinning 100
         if thinning<1 then invalidArg "thinning" "must be > 0."
         let rng = defaultArg rng (MT19937())
-        Sampler.continuemcmc(Sampler.Create(pp, rng, logl), logl, burnCount, sampleCount, thinning)
+        let sampler = Sampler.Create(pp, rng, logl)
+        let checkpoint = {burnedIn=sampler; final=sampler; burnInTrace=[]; 
+                          samples=[]; acceptanceRate=0.; thinning=thinning}
+        Sampler.continuemcmc(checkpoint, logl, burnCount, sampleCount)
 
     /// Continuation of sampling procedure after incomplete burn-in. It does `burnCount` additional burn-in iterations
     /// followed by collecting `sampleCount` samples from posterior.
     /// Total number of iterations is `burnCount + thinning * sampleCount`.
-    static member continuemcmc(sampler:Sampler, logl, burnCount, sampleCount, ?thinning) =
-        let thinning = defaultArg thinning 100
+    static member continuemcmc(checkpoint:SamplerCheckpoint, logl, burnCount, sampleCount) =
+        let thinning = checkpoint.thinning
         if thinning<1 then invalidArg "thinning" "must be > 0."
         // initialize sampler
-        let mutable sampler = sampler
+        let mutable sampler = checkpoint.burnedIn
+        let checkpointBurnCount = sampler.Iteration
+        let checkpointSamples, checkpointRate = 
+            if burnCount>checkpointBurnCount then [], 1. 
+            else checkpoint.samples, checkpoint.acceptanceRate
         // do burn-in iterations
-        for _ in 1..burnCount do sampler <- sampler.Probe(true, logl)
+        let trace =
+            [
+                for _ in checkpointBurnCount..burnCount -> 
+                    sampler <- sampler.Probe(true, logl)
+                    sampler.LogLikelihood, sampler.LogPrior
+            ]
         let burnedIn = Sampler(sampler) // saved copy
         // collect sampleCount samples
+        let checkpointSamplesCount = checkpointSamples.Length
         let mutable countAccepted = 0
         let samples = 
             [
-            for _ in 1..sampleCount ->
+            for _ in checkpointSamplesCount+1..sampleCount ->
                 for _ in 1..thinning do
                     sampler <- sampler.Probe(false, logl)
                     if sampler.IsAccepted then countAccepted <- countAccepted + 1
                 {values=Array.copy sampler.Parameters.values; logLikelihood = sampler.LogLikelihood; logPrior = sampler.LogPrior}
             ]
-        {burnedIn=burnedIn; final = sampler; samples = samples; acceptanceRate = ((float countAccepted) / (float sampleCount * float thinning))}
+        {
+            burnedIn=burnedIn
+            burnInTrace = checkpoint.burnInTrace @ trace
+            final = sampler
+            samples = checkpointSamples @ samples
+            acceptanceRate =
+                ((float countAccepted + checkpointRate * float checkpointSamplesCount * float thinning) 
+                    / (float sampleCount * float thinning))
+            thinning = thinning
+        }
     
     /// Prints summary of results from `runmcmc` or `continuemcmc`.
     static member print {final=sampler; samples=samples; acceptanceRate = acceptanceRate} =
@@ -521,8 +551,9 @@ module Serialization =
             member x.Serialize _ s = serializeSampler s
             member x.Deserialize _ is = deserializeSampler is
 
-    let Register (lib:ISerializerLibrary) =
-        lib.Register(Angara.Statistics.Serialization.MersenneTwisterSerializer())
-        lib.Register(Angara.Statistics.Serialization.DistributionSerializer())
-        lib.Register(ParametersSerializer())
-        lib.Register(SamplerSerializer())
+    let Register (libraries:ISerializerLibrary seq) =
+        libraries |> Seq.iter (fun lib ->
+            lib.Register(Angara.Statistics.Serialization.MersenneTwisterSerializer())
+            lib.Register(Angara.Statistics.Serialization.DistributionSerializer())
+            lib.Register(ParametersSerializer())
+            lib.Register(SamplerSerializer()))
