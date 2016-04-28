@@ -30,6 +30,18 @@ type Distribution =
   /// A weighted mixture of distributions.
   | Mixture of (float*Distribution) list
 
+  /// Make a distribution which density matches a piecewise linear curve.
+  /// Abscissas must be in increasing order.
+  /// Oridnates must be positive values. The function scales the density so that its norm = 1.
+  static member fromPiecewise (density: (float * float) seq) =
+    let x, y = density |> Array.ofSeq |> Array.unzip
+    let n = Array.length x
+    if seq {for i in 0..n-2 -> x.[i] >= x.[i+1]} |> Seq.reduce (||) then invalidOp "Abscissas must be in increasing order."
+    if Array.exists (fun v -> v < 0.) y then invalidOp "Oridnates must be positive values."
+    let cc = [for i in 0..n-2 -> 0.5*(y.[i+1]+y.[i])*(x.[i+1]-x.[i])]
+    let norm = List.sum cc
+    Mixture (cc |> List.mapi (fun i c -> c/norm, Linear(x.[i], x.[i+1], y.[i]/c)))
+
 /// The smallest positive normalized `float` value
 let improbable = 2.2250738585072014E-308 // 2^(-1022)
 /// Logarithm of `improbable`
@@ -209,7 +221,7 @@ let rec log_pdf d v =
                 if v < min x1 x2 || v > max x1 x2 then log_improbable
                 elif x1=x2 then infinity else
                 let h = 2./abs(x2-x1)
-                let p1 = if density<0. then 0. elif density > h then h else density // p1 = 2*a*x1+b
+                let p1 = if density<improbable then improbable elif density > h then h else density // p1 = 2*a*x1+b
                 let p2 = h-p1 // 0.5*(p1+p2)*abs(x2-x1) == 1; p2 = 2*a*x2+b
                 log(p1+(v-x1)*(p2-p1)/(x2-x1))
             | Exponential(mean) -> 
@@ -608,7 +620,7 @@ let rec draw (gen:MT19937) d = // random number generator
     | Linear(x1,x2,density) ->
         if x1=x2 then x1 else
         let h = 2./(x2-x1)
-        let p, pmin, pmax = if h>0. then density, 0., h else -density, h, 0.
+        let p, pmin, pmax = if h>improbable then density, improbable, h else -density, h, -improbable
         let p1 = if p<pmin then pmin elif p>pmax then pmax else p // p1 = 2*a*x1+b
         let p2 = h-p1 // 0.5*(p1+p2)*(x2-x1) == 1; p2 = 2*a*x2+b
         let a4 = (p2-p1)*h // 4*a
