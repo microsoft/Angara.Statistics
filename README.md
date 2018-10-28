@@ -9,7 +9,7 @@ Includes Mersenne twister random number generator, common probability distributi
 sampling statistics and quantiles, a kernel density estimator and
 a resumable Metropolis-Hastings MCMC sampler.
 
-Documentation: http://predictionmachines.github.io/Angara.Statistics
+**Documentation**: http://predictionmachines.github.io/Angara.Statistics
 
 
 ## Build Status
